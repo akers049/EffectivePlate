@@ -1,0 +1,17 @@
+# output name
+TEST_INPUT_00
+
+# grid dimensions
+20 7
+
+# domain dimensions
+1.0 1.0
+
+# material parameters: a,b,c
+1.0 1.0 1.0
+
+# quadrature pts in each dir
+2 2
+
+# newton raphson tolerance and  max steps
+1e-7 100
