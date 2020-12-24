@@ -47,16 +47,34 @@ using namespace dealii;
   {
     public:
     plate_energy(){};
-    void set_params(double a_, double b_,  double c_);
+    void set_params(double wx_, double wy_,  double lx_, double ly_, double delta_);
+    void set_moduli(double mu_, double lambda_, double B_, double eta_)
+    {
+      mu = mu_;
+      lambda = lambda_;
+      B = B_;
+      eta = eta_;
+    };
 
 
     double get_E(Tensor<2,DIM> &F, Tensor<1,DIM> grad_w, double &lap_w);
     void get_DE(Tensor<2,DIM> &F, Tensor<1,DIM> grad_w, double &lap_w, DE_data &de);
     void get_DDE(Tensor<2,DIM> &F, Tensor<1,DIM> grad_w, double &lap_w, DDE_data &dde);
 
-    double a = 1.0;
-    double b = 1.0;
-    double c = 1.0;
+    double wx = 1.0;
+    double wy = 1.0;
+    double lx = 1.0;
+    double ly = 1.0;
+    double delta = 1.0;
+    double dh = 1.0;
+    double dv = 1.0;
+
+    double gamma = 1.0;
+    double B = 1.0;
+    double mu = 1.0;
+    double lambda = 1.0;
+    double eta = 1.0;
+
   };
 
 

@@ -78,6 +78,55 @@ namespace effective_plate
   ****************************************************************/
 
 
+  class WX : public Function<DIM>
+  {
+
+  public:
+      WX () : Function<DIM>() {}
+    virtual ~WX (){}
+
+    // const double PI = std::atan(1.0)*4;
+
+    virtual double value (const Point<DIM> &p,
+                          const unsigned int  component = 0) const;
+
+    virtual void value_list(const std::vector< Point< DIM > > &  points,
+                             std::vector< double > &   values,
+                             const unsigned int  component = 0 )  const;
+
+    void set_param_values(double lx_, double ly_, double delta_);
+
+
+    double lx = 1.0;
+    double ly = 1.0;
+    double delta = 1.0;
+
+  };
+
+  class WY : public Function<DIM>
+  {
+
+  public:
+      WY () : Function<DIM>() {}
+    virtual ~WY (){}
+
+    // const double PI = std::atan(1.0)*4;
+
+    virtual double value (const Point<DIM> &p,
+                          const unsigned int  component = 0) const;
+
+    virtual void value_list(const std::vector< Point< DIM > > &  points,
+                             std::vector< double > &   values,
+                             const unsigned int  component = 0 )   const;
+
+    void set_param_values(double lx_, double ly_, double delta_);
+
+    double lx = 1.0;
+    double ly = 1.0;
+    double delta = 1.0;
+
+  };
+
   /****  ElasticProblem  *****
    * This is the primary class used, with all the dealii stuff
    */
@@ -180,6 +229,9 @@ namespace effective_plate
     std::vector<unsigned int>  grid_dimensions;
     std::vector<double> domain_dimensions;
 
+    WX eval_wx;
+    WY eval_wy;
+
 
     unsigned int iter = 0;
 
@@ -187,9 +239,14 @@ namespace effective_plate
     unsigned int qx = 2;
     unsigned int qy = 2;
 
-    double a = 1.0;
-    double b = 1.0;
-    double c = 1.0;
+    double lx = 1.0;
+    double ly = 1.0;
+    double delta = 1.0;
+
+    double mu = 1.0;
+    double lambda = 1.0;
+    double B = 1.0;
+    double eta = 1.0;
 
     double load_val = 0.01;
     unsigned int load_steps = 10;

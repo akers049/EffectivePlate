@@ -41,6 +41,71 @@ namespace effective_plate
       F[i][i] += 1.0;
   }
 
+
+  double WX::value (const Point<DIM>  &p,
+                                   const unsigned int  component) const
+  {
+    // this is a scalar function, so make sure component is zero...
+    Assert (component == 0, ExcNotImplemented());
+    Assert (p.dimension == 2, ExcNotImplemented())
+
+    // Put your function for WX. p(0) is x1 value, p(1) is the x2 value
+
+    double wx = (lx - delta)/2.0;
+
+    return wx;
+  }
+
+  void WX::value_list(const std::vector< Point< DIM > > &  points,
+                           std::vector< double > &   values,
+                           const unsigned int  component ) const
+  {
+    for(unsigned int i = 0; i < points.size(); i++)
+      values[i] = WX::value(points[i], component);
+
+  }
+
+  void WX::set_param_values(double lx_, double ly_, double delta_)
+  {
+    lx = lx_;
+    ly = ly_;
+    delta = delta_;
+  }
+
+  double WY::value (const Point<DIM>  &p,
+                    const unsigned int  component) const
+  {
+    // this is a scalar function, so make sure component is zero...
+    Assert (component == 0, ExcNotImplemented());
+    Assert (p.dimension == 2, ExcNotImplemented())
+
+    // Put your function for WY. p(0) is x1 value, p(1) is the x2 value
+    double x1 = p[0];
+    double x2 = p[1];
+
+    double wy = ((ly - delta)/2.0)*(1.0 - sin(x2*M_PI));
+
+    return wy;
+  }
+
+  void WY::value_list(const std::vector< Point< DIM > > &  points,
+                           std::vector< double > &   values,
+                           const unsigned int  component ) const
+  {
+    for(unsigned int i = 0; i < points.size(); i++)
+      values[i] = WY::value(points[i], component);
+
+  }
+
+  void WY::set_param_values(double lx_, double ly_, double delta_)
+  {
+    lx = lx_;
+    ly = ly_;
+    delta = delta_;
+  }
+
+
+
   PlateProblem::PlateProblem ()
     :
     dof_handler (triangulation),
@@ -93,7 +158,7 @@ namespace effective_plate
 
 
 
-    PE.set_params(a, b, c);
+    PE.set_moduli(mu, lambda, B, eta);
 
     present_solution.reinit (dof_handler.n_dofs());
 
@@ -312,6 +377,9 @@ namespace effective_plate
     const FEValuesExtractors::Vector displacements (0);
     const FEValuesExtractors::Scalar w (DIM);
 
+    std::vector<double> wx(n_q_points);
+    std::vector<double> wy(n_q_points);
+
     Tensor<2,DIM> F;
 
     typename DoFHandler<DIM>::active_cell_iterator cell = dof_handler.begin_active(),
@@ -324,12 +392,15 @@ namespace effective_plate
       fe_values[w].get_function_gradients(evaluation_point, w_gradients);
       fe_values[w].get_function_hessians(evaluation_point, w_hessians);
 
+      eval_wx.value_list (fe_values.get_quadrature_points(), wx);
+      eval_wy.value_list (fe_values.get_quadrature_points(), wy);
+
 
       unsigned int cell_index = cell->active_cell_index();
 
       for (unsigned int q_point=0; q_point<n_q_points; ++q_point)
       {
-        PE.set_params(a, b, c);
+        PE.set_params(wx[q_point], wy[q_point], lx, ly, delta);
         get_F(displacement_gradients[q_point], F);
         double lap_w = trace(w_hessians[q_point]);
         system_energy += PE.get_E(F, w_gradients[q_point], lap_w)*fe_values.JxW(q_point);
@@ -358,6 +429,8 @@ namespace effective_plate
     std::vector<Tensor<1, DIM>> w_gradients(n_q_points);
     std::vector<Tensor<2, DIM>> w_hessians(n_q_points);
 
+    std::vector<double> wx(n_q_points);
+    std::vector<double> wy(n_q_points);
 
     std::vector<types::global_dof_index> local_dof_indices (dofs_per_cell);
 
@@ -382,11 +455,14 @@ namespace effective_plate
       fe_values[w].get_function_gradients(evaluation_point, w_gradients);
       fe_values[w].get_function_hessians(evaluation_point, w_hessians);
 
+      eval_wx.value_list (fe_values.get_quadrature_points(), wx);
+      eval_wy.value_list (fe_values.get_quadrature_points(), wy);
+
       unsigned int cell_index = cell->active_cell_index();
 
       for (unsigned int q_point=0; q_point<n_q_points; ++q_point)
       {
-        PE.set_params(a, b, c);
+        PE.set_params(wx[q_point], wy[q_point], lx, ly, delta);
         get_F(displacement_gradients[q_point], F);
         double lap_w = trace(w_hessians[q_point]);
 
@@ -456,6 +532,8 @@ namespace effective_plate
 
     Tensor<2,DIM> F;
 
+    std::vector<double> wx(n_q_points);
+    std::vector<double> wy(n_q_points);
 
 
     FullMatrix<double>   cell_matrix (dofs_per_cell, dofs_per_cell);
@@ -472,17 +550,18 @@ namespace effective_plate
 
       fe_values.reinit (cell);
 
-      fe_values.reinit (cell);
-
       fe_values[displacements].get_function_gradients(evaluation_point, displacement_gradients);
       fe_values[w].get_function_gradients(evaluation_point, w_gradients);
       fe_values[w].get_function_hessians(evaluation_point, w_hessians);
+
+      eval_wx.value_list (fe_values.get_quadrature_points(), wx);
+      eval_wy.value_list (fe_values.get_quadrature_points(), wy);
 
       unsigned int cell_index = cell->active_cell_index();
 
       for (unsigned int q_point=0; q_point<n_q_points; ++q_point)
       {
-        PE.set_params(a, b, c);
+        PE.set_params(wx[q_point], wy[q_point], lx, ly, delta);
         get_F(displacement_gradients[q_point], F);
         double lap_w = trace(w_hessians[q_point]);
 
@@ -786,10 +865,19 @@ namespace effective_plate
         goto fileClose;
       }
 
-      // read in some dummy parameters for now
+      // read in some good parameters for now
       getNextDataLine(fid, nextLine, MAXLINE, &endOfFileFlag);
-      valuesWritten = sscanf(nextLine, "%lg %lg %lg", &a, &b, &c);
+      valuesWritten = sscanf(nextLine, "%lg %lg %lg", &lx, &ly, &delta);
       if(valuesWritten != 3)
+      {
+        fileReadErrorFlag = true;
+        goto fileClose;
+      }
+
+      // read in some good  moduii parameters for now
+      getNextDataLine(fid, nextLine, MAXLINE, &endOfFileFlag);
+      valuesWritten = sscanf(nextLine, "%lg %lg %lg %lg", &mu, &lambda, &B, &eta);
+      if(valuesWritten != 4)
       {
         fileReadErrorFlag = true;
         goto fileClose;
@@ -1116,7 +1204,7 @@ namespace effective_plate
     }
 
     out << "\n\n\nDifference" << std::endl;
-
+    eta = eta_;
     double diffNorm = 0;
     for(unsigned int i = 0; i < numberDofs; i++)
     {
