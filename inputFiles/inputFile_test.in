@@ -2,16 +2,22 @@
 TEST_INPUT_00
 
 # grid dimensions
-20 7
+14 14
 
 # domain dimensions
 1.0 1.0
 
 # material parameters: a,b,c
-1.0 1.0 1.0
+0.0278 0.05555 0.0034722
+
+# mu lambda B eta
+1.0 10.0 0.01 0.01
+
+# ds num steps
+0.3 100
 
 # quadrature pts in each dir
-2 2
+3 3
 
 # newton raphson tolerance and  max steps
 1e-7 100

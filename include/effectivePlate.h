@@ -187,8 +187,6 @@ namespace effective_plate
     void getNextDataLine( FILE* const filePtr, char* nextLinePtr,
                             int const maxSize, int* const endOfFileFlag);
 
-    void renumber_boundary_ids();
-
     void add_small_perturbations(double amplitude, bool firstTime);
 
     void set_displacement(double value)

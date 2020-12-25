@@ -33,10 +33,13 @@ int main (int argc, char** argv)
 //  ep.rhs_numerical_deriv(1e-5);
 //  ep.compute_and_compare_second_numer_deriv(1e-5);
 
+
+//  pp.rhs_numerical_deriv(1e-9);
+//  pp.compute_and_compare_second_numer_deriv(1e-9);
+
   pp.solve_forward_problem();
 
-    pp.rhs_numerical_deriv(1e-9);
-    pp.compute_and_compare_second_numer_deriv(1e-9);
+
 
   return 0;
 

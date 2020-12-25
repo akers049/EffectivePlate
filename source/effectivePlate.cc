@@ -130,14 +130,11 @@ namespace effective_plate
     // creates our strip.
     Point<DIM> corner1, corner2;
     corner1(0) =  0;
-    corner1(1) =  -domain_dimensions[1]/2.0;
+    corner1(1) =  0;
     corner2(0) =  domain_dimensions[0];
-    corner2(1) =  domain_dimensions[1]/2.0;
+    corner2(1) =  domain_dimensions[1];
 
     GridGenerator::subdivided_hyper_rectangle (triangulation, grid_dimensions, corner1, corner2, true);
-
-    // Make sure to renumber the boundaries
-    renumber_boundary_ids();
 
   }
 
@@ -157,6 +154,7 @@ namespace effective_plate
     quadrature_formula = new QAnisotropic<DIM>(quad_x, quad_y);
 
 
+    double number_dofs = dof_handler.n_dofs();
 
     PE.set_moduli(mu, lambda, B, eta);
 
@@ -180,43 +178,45 @@ namespace effective_plate
 //    GridTools::distort_random(0.4, triangulation, true);
 
 
-    // MAKE SURE TO SET UP THE DOFS WE WILL APPLY HOMOGENOUS CONDITIONS TO
-//    system_matrix.reinit (sparsity_pattern);
-//
-//    evaluation_point = present_solution;
-//
-//    // get the dofs that we will apply dirichlet condition to
-//    homo_dofs.resize(dof_handler.n_dofs(), false);
-//    load_dofs.resize(dof_handler.n_dofs(), false);
-//
-//    std::set< types::boundary_id > boundary_id_12;
-//    boundary_id_12.insert(1);
-//    boundary_id_12.insert(2);
-//
-//    std::set< types::boundary_id > boundary_id_2;
-//    boundary_id_2.insert(2);
-//
-//    std::vector<bool> x1_comp = {true, false, false, false};
-//    ComponentMask x1_mask(x1_comp);
-//
-//    std::vector<bool> all_components = {true, true, true, true};
-//    ComponentMask all_mask(all_components);
-//
-//    DoFTools::extract_boundary_dofs(dof_handler,
-//                                       all_mask,
-//                                       homo_dofs,
-//                                       boundary_id_12);
-//
-//    DoFTools::extract_boundary_dofs(dof_handler,
-//                                       x1_mask,
-//                                       load_dofs,
-//                                       boundary_id_2);
-//
-//    a_lambda_dofs.resize(dof_handler.n_dofs(), false);
-//    std::vector<bool> a_lambda_comp = {false, false, true, true};
-//    ComponentMask a_lambda_mask(a_lambda_comp);
-//    DoFTools::extract_dofs(dof_handler, a_lambda_mask, a_lambda_dofs);
+    system_matrix.reinit (sparsity_pattern);
 
+    evaluation_point = present_solution;
+
+    homo_dofs.resize(dof_handler.n_dofs(), false);
+    load_dofs.resize(dof_handler.n_dofs(), false);
+
+
+    std::vector<Point<DIM>> support_points(dof_handler.n_dofs());
+    MappingQ1<DIM> mapping;
+    DoFTools::map_dofs_to_support_points(mapping, dof_handler, support_points);
+
+    std::vector<bool> x1_components = {true, false, false};
+     ComponentMask x1_mask(x1_components);
+
+     std::vector<bool> is_x1_comp(number_dofs);
+
+     DoFTools::extract_dofs(dof_handler, x1_mask, is_x1_comp);
+
+
+     for(unsigned int  i = 0; i < number_dofs; i ++)
+     {
+       if(fabs( support_points[i](1) - domain_dimensions[1]/2.0) < 1.0e-6)
+       {
+         if(fabs(support_points[i](0)) < 1.0e-6)
+         {
+           homo_dofs[i] = true;
+         }
+
+         if(fabs(support_points[i](0) - domain_dimensions[0]) < 1.0e-6)
+         {
+           if(is_x1_comp[i] == true)
+             load_dofs[i] = true;
+
+           homo_dofs[i] = true;
+         }
+
+       }
+     }
   }
 
 
@@ -224,6 +224,39 @@ namespace effective_plate
   {
 
     constraints.clear ();
+
+    const unsigned int   number_dofs = dof_handler.n_dofs();
+
+    // now do constraints that the average w displacement is zero
+    std::vector<bool> w_components = {false, false, true};
+    ComponentMask w_mask(w_components);
+
+    std::vector<bool> boundary_dof_w (number_dofs, false);
+
+
+    DoFTools::extract_boundary_dofs(dof_handler,
+        w_mask,
+        boundary_dof_w);
+
+    unsigned int first_boundary_dof = 0;
+    for (unsigned int i=0; i<dof_handler.n_dofs(); ++i)
+    {
+      if ((boundary_dof_w[i] == true))
+      {
+        first_boundary_dof = i;
+        break;
+      }
+    }
+    constraints.add_line (first_boundary_dof);
+    for (unsigned int i=0; i<dof_handler.n_dofs(); ++i)
+    {
+      if (i == first_boundary_dof)
+        continue;
+
+      if(boundary_dof_w[i] == true)
+        constraints.add_entry (first_boundary_dof, i, -1);
+
+    }
 
     constraints.close ();
 
@@ -462,12 +495,16 @@ namespace effective_plate
 
       for (unsigned int q_point=0; q_point<n_q_points; ++q_point)
       {
+
+
         PE.set_params(wx[q_point], wy[q_point], lx, ly, delta);
         get_F(displacement_gradients[q_point], F);
         double lap_w = trace(w_hessians[q_point]);
 
         double JxW = fe_values.JxW(q_point);
 
+//        if(cell_index == 69)
+//          PE.numerical_deriv_internal(F, w_gradients[q_point], lap_w);
 
         PE.get_DE(F, w_gradients[q_point], lap_w, de_dat);
 
@@ -883,6 +920,17 @@ namespace effective_plate
         goto fileClose;
       }
 
+      // ds and numSteps
+      getNextDataLine(fid, nextLine, MAXLINE, &endOfFileFlag);
+      valuesWritten = sscanf(nextLine, "%lg %u", &load_val, &load_steps);
+      if(valuesWritten != 2)
+      {
+        fileReadErrorFlag = true;
+        goto fileClose;
+      }
+
+
+
       // read in the number of guass points in the x and y direction
       getNextDataLine(fid, nextLine, MAXLINE, &endOfFileFlag);
       valuesWritten = sscanf(nextLine, "%u  %u", &qx, &qy);
@@ -1048,39 +1096,6 @@ namespace effective_plate
 
   }
 
-
-  void PlateProblem::renumber_boundary_ids()
-  {
-
-    // renumber boundary ids because they have problems being saved for nonuniform mesh.
-    typename Triangulation<DIM>::active_cell_iterator cell =
-     triangulation.begin_active(), endc = triangulation.end();
-    for (; cell != endc; ++cell)
-      for (unsigned int f = 0; f < GeometryInfo<DIM>::faces_per_cell; ++f)
-      {
-
-        const Point<DIM> face_center = cell->face(f)->center();
-        if (fabs(face_center[0]) < 1e-4)  // left
-        {
-          cell->face(f)->set_boundary_id (1);
-        }
-        else if (fabs(face_center[0] - domain_dimensions[0]) < 1e-4)
-        {// right
-          cell->face(f)->set_boundary_id (2);
-        }
-        else if (fabs(face_center[1] + domain_dimensions[1]/2.0) < 1e-6) //bottom
-        {
-          cell->face(f)->set_boundary_id (3);
-        }
-        else if (fabs(face_center[1] - domain_dimensions[1]/2.0) < 1e-6) //top
-        {
-         cell->face(f)->set_boundary_id (4);
-
-        }
-
-      }
-  }
-
   void PlateProblem::add_small_perturbations(double amplitude, bool firstTime)
   {
     // This is just to make the solution vector non-zero so it doesn't start at the right answer.
@@ -1105,6 +1120,7 @@ namespace effective_plate
   void PlateProblem::rhs_numerical_deriv(double delta)
   {
     add_small_perturbations(0.000174, true);
+//    apply_boundaries_to_rhs(&present_solution, &homo_dofs);
     assemble_system_energy();
 
 //    stuffOn = true;
@@ -1204,7 +1220,7 @@ namespace effective_plate
     }
 
     out << "\n\n\nDifference" << std::endl;
-    eta = eta_;
+
     double diffNorm = 0;
     for(unsigned int i = 0; i < numberDofs; i++)
     {

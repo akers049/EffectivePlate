@@ -61,6 +61,19 @@ using namespace dealii;
     void get_DE(Tensor<2,DIM> &F, Tensor<1,DIM> grad_w, double &lap_w, DE_data &de);
     void get_DDE(Tensor<2,DIM> &F, Tensor<1,DIM> grad_w, double &lap_w, DDE_data &dde);
 
+    void numerical_deriv_internal(Tensor<2,DIM> &F, Tensor<1,DIM> grad_w, double &lap_w);
+
+    private:
+
+    void get_dPhi_dC(Tensor<2,DIM> &C, Tensor<2,DIM> &dPhi_dC);
+
+    double dirac(unsigned int i, unsigned int j)
+    {
+      double ret_val = 0.0;
+      (i == j ? ret_val = 1.0: ret_val = 0.0);
+      return ret_val;
+    };
+
     double wx = 1.0;
     double wy = 1.0;
     double lx = 1.0;
