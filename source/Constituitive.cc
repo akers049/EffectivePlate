@@ -85,6 +85,7 @@ using namespace dealii;
   void plate_energy::get_DDE(Tensor<2,DIM> &F, Tensor<1,DIM> grad_w, double &lap_w, DDE_data &dde)
   {
 
+    dde.clear();
 
     Tensor<2,DIM> C;
     C = transpose(F)*F;

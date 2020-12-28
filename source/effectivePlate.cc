@@ -21,6 +21,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <deal.II/lac/slepc_solver.h>
+
 
 
 #define DIM 2
@@ -110,7 +112,7 @@ namespace effective_plate
     :
     dof_handler (triangulation),
     fe (FESystem<DIM>(FE_Q<DIM>(1), DIM), 1,
-         FE_Q<DIM>(2), 1)
+         FE_Q<DIM>(3), 1)
   {}
 
 
@@ -158,6 +160,9 @@ namespace effective_plate
 
     PE.set_moduli(mu, lambda, B, eta);
 
+    eval_wx.set_param_values(lx, ly, delta);
+    eval_wy.set_param_values(lx, ly, delta);
+
     present_solution.reinit (dof_handler.n_dofs());
 
     setup_system_constraints();
@@ -180,6 +185,9 @@ namespace effective_plate
 
     system_matrix.reinit (sparsity_pattern);
 
+    system_matrix_petsc.reinit (sparsity_pattern);
+
+
     evaluation_point = present_solution;
 
     homo_dofs.resize(dof_handler.n_dofs(), false);
@@ -196,6 +204,13 @@ namespace effective_plate
      std::vector<bool> is_x1_comp(number_dofs);
 
      DoFTools::extract_dofs(dof_handler, x1_mask, is_x1_comp);
+
+     std::vector<bool> w_components = {false, false, true};
+      ComponentMask w_mask(w_components);
+
+      std::vector<bool> is_w_comp(number_dofs);
+
+      DoFTools::extract_dofs(dof_handler, w_mask, is_w_comp);
 
 
      for(unsigned int  i = 0; i < number_dofs; i ++)
@@ -216,6 +231,15 @@ namespace effective_plate
          }
 
        }
+
+       // do the extra point we are constraining
+       if(fabs( support_points[i](0) - domain_dimensions[0]/2.0) < 1.0e-6 &&
+           (fabs(support_points[i](1)) < 1.0e-6  || fabs(support_points[i](1) - domain_dimensions[1]) < 1.0e-6)
+               && is_w_comp[i] == true)
+       {
+         homo_dofs[i] = true;
+       }
+
      }
   }
 
@@ -228,35 +252,36 @@ namespace effective_plate
     const unsigned int   number_dofs = dof_handler.n_dofs();
 
     // now do constraints that the average w displacement is zero
-    std::vector<bool> w_components = {false, false, true};
-    ComponentMask w_mask(w_components);
+//    std::vector<bool> w_components = {false, false, true};
+//    ComponentMask w_mask(w_components);
+//
+//    std::vector<bool> boundary_dof_w (number_dofs, false);
+//
+//
+//    DoFTools::extract_boundary_dofs(dof_handler,
+//        w_mask,
+//        boundary_dof_w);
+//
+//    unsigned int first_boundary_dof = 0;
+//    for (unsigned int i=0; i<dof_handler.n_dofs(); ++i)
+//    {
+//      if ((boundary_dof_w[i] == true))
+//      {
+//        first_boundary_dof = i;
+//        break;
+//      }
+//    }
+//    constraints.add_line (first_boundary_dof);
+//    for (unsigned int i=0; i<dof_handler.n_dofs(); ++i)
+//    {
+//      if (i == first_boundary_dof)
+//        continue;
+//
+//      if(boundary_dof_w[i] == true)
+//        constraints.add_entry (first_boundary_dof, i, -1);
+//
+//    }
 
-    std::vector<bool> boundary_dof_w (number_dofs, false);
-
-
-    DoFTools::extract_boundary_dofs(dof_handler,
-        w_mask,
-        boundary_dof_w);
-
-    unsigned int first_boundary_dof = 0;
-    for (unsigned int i=0; i<dof_handler.n_dofs(); ++i)
-    {
-      if ((boundary_dof_w[i] == true))
-      {
-        first_boundary_dof = i;
-        break;
-      }
-    }
-    constraints.add_line (first_boundary_dof);
-    for (unsigned int i=0; i<dof_handler.n_dofs(); ++i)
-    {
-      if (i == first_boundary_dof)
-        continue;
-
-      if(boundary_dof_w[i] == true)
-        constraints.add_entry (first_boundary_dof, i, -1);
-
-    }
 
     constraints.close ();
 
@@ -278,16 +303,41 @@ namespace effective_plate
     double du = load_val/(1.0*load_steps);
     double current_load_value = 0.0;
 
+    double E0 = 0.0;
+    assemble_system_energy();
+    E0 = system_energy;
+
     for(unsigned int i = 0; i < load_steps; i ++)
     {
-      current_load_value += du;
+      current_load_value = du*i;
       set_displacement(current_load_value);
 
       std::cout << "  Iteration : " << i+1 << std::endl;
       newton_iterate();
+
+      unsigned int num_neg_eigs;
+
+//      output_matrix_csv();
+//      exit(-1);
+      if(i == 0)
+        num_neg_eigs = get_system_eigenvalues(-1);
+      std::cout << "      Number of negative eigenvalues is : " << num_neg_eigs << std::endl;
+
       output_results(i);
+
+      output_matrix_csv();
+
+      break;
+      exit(-1);
     }
 
+
+    evaluation_point = present_solution;
+    assemble_system_energy();
+    double E1 = system_energy;
+
+    std::cout << "Old Energy : " << E0 << std::endl;
+    std::cout << "New Energy : " << E1 << std::endl;
 
 
   }
@@ -385,6 +435,141 @@ namespace effective_plate
     present_solution = evaluation_point;
 
     return current_residual;
+  }
+
+  unsigned int PlateProblem::get_system_eigenvalues(const int cycle)
+  {
+    // get the system's eigenvalues. I really don't need to have it take in lambda_eval
+    // and could just have it use the present_lambda, but its fine. the cycle is the
+    // the output file will have appended on its name. -1 for no output. Outputs the number
+    // of negative eigenvalues in the range -10 < lambda < 0.3
+
+    evaluation_point = present_solution;
+    assemble_system_matrix();
+    apply_boundaries_and_constraints_system_matrix(&homo_dofs);
+
+    LAPACKFullMatrix<double> system_matrix_full;
+    system_matrix_full.copy_from(system_matrix);
+
+    Vector<double> eigenvalues;
+    FullMatrix<double> eigenvectors;
+
+    double tol = 1.0e-7;
+
+    system_matrix_full.compute_eigenvalues_symmetric(-10, 10000, tol, eigenvalues, eigenvectors);
+
+    unsigned int num_neg_eigs = 0;
+    for(unsigned int i = 0; i < eigenvalues.size(); i ++)
+    {
+      std::cout << eigenvalues[i] << std::endl;
+
+      if(eigenvalues[i] < -tol)
+        num_neg_eigs ++;
+    }
+
+    for(unsigned int i = 0; i < dof_handler.n_dofs(); i ++)
+    {
+      present_solution[i] = eigenvectors[i][0];
+    }
+
+    apply_boundaries_to_rhs(&present_solution, &homo_dofs);
+
+//    std::vector<PETScWrappers::MPI::Vector> eigenfunctions;
+//    std::vector<double>                     eigenvalues;
+//    IndexSet eigenfunction_index_set(dof_handler.n_dofs());
+//    eigenfunction_index_set.add_range(0, dof_handler.n_dofs());
+//    eigenfunctions.resize (219);
+//    for (unsigned int i=0; i<eigenfunctions.size (); ++i)
+//      eigenfunctions[i].reinit (eigenfunction_index_set, MPI_COMM_WORLD);
+//
+//    eigenvalues.resize (eigenfunctions.size());
+//    system_matrix_petsc = 0.0;
+//    for (unsigned int row = 0; row < system_matrix.m(); ++row)
+//    {
+//      const typename SparseMatrix<double>::const_iterator end_row = system_matrix.end(row);
+//      for (typename SparseMatrix<double>::const_iterator entry = system_matrix.begin(row);
+//                             entry != end_row; ++entry)
+//       {
+//         if(fabs(entry->value()) > 1e-10 )
+//           system_matrix_petsc.set(row, entry->column(),entry->value());
+//       }
+//    }
+//
+//    system_matrix_petsc.compress(VectorOperation::insert);
+//    SolverControl solver_control (dof_handler.n_dofs()*100, 1e-5);
+////    SLEPcWrappers::SolverKrylovSchur eigensolver (solver_control);
+//    SLEPcWrappers::SolverLAPACK eigensolver (solver_control);
+//
+//    // Before we actually solve for the eigenfunctions and -values, we have to
+//    // also select which set of eigenvalues to solve for. Lets select those
+//    // eigenvalues and corresponding eigenfunctions with the smallest real
+//    // part (in fact, the problem we solve here is symmetric and so the
+//    // eigenvalues are purely real). After that, we can actually let SLEPc do
+//    // its work:
+////    eigensolver.set_target_eigenvalue(-10.0);
+//    eigensolver.set_which_eigenpairs (EPS_SMALLEST_REAL);
+//
+//    eigensolver.set_problem_type (EPS_HEP);
+//
+//    eigensolver.solve (system_matrix_petsc,
+//                       eigenvalues, eigenfunctions,
+//                       eigenfunctions.size());
+//
+//
+////    for(unsigned int i = 0; i < dof_handler.n_dofs(); i ++)
+////    {
+////      present_solution[i] = 0.1*eigenfunctions[0][i];
+////    }
+//
+//    unsigned int num_neg_eigs = 0;
+//    if (cycle != -1)
+//    {
+//      std::string filename(output_directory);
+//          filename += "/eigenvalues";
+//
+//      // see if the directory exists
+//      struct stat st;
+//      if (stat(filename.c_str(), &st) == -1)
+//        mkdir(filename.c_str(), 0700);
+//
+//      filename += "/eigenvalues-";
+//      filename += std::to_string(cycle);
+//
+//      std::ofstream outputFile;
+//      outputFile.open(filename.c_str());
+//
+//      //outputFile << "# eigenvalues of the system matrix" << std::endl;
+//
+//      for (unsigned int i = 0 ; i < eigenvalues.size(); i ++)
+//      {
+//        double nextEigenVal = eigenvalues[i];
+//
+//        outputFile << std::setprecision(15) << nextEigenVal << std::endl;
+//
+//        if (nextEigenVal < 0.0)
+//        {
+//          num_neg_eigs ++;
+//        }
+//
+//      }
+//
+//      // outputFile << "\nIs positive definite : " << num_neg_eigs << std::endl;
+//      outputFile.close();
+//    }
+//    else
+//    {
+//      for (unsigned int i = 0; i < eigenvalues.size(); i++)
+//      {
+//        std::cout << eigenvalues[i] << std::endl;
+//        if (eigenvalues[i] < 0.0)
+//        {
+//          num_neg_eigs ++;
+////          break;
+//        }
+//      }
+//    }
+
+    return num_neg_eigs;
   }
 
   void PlateProblem::assemble_system_energy()
@@ -604,7 +789,6 @@ namespace effective_plate
 
         double JxW = fe_values.JxW(q_point);
 
-
         PE.get_DDE(F, w_gradients[q_point], lap_w, dde_dat);
 
         for (unsigned int n = 0; n < dofs_per_cell; ++n)
@@ -708,6 +892,7 @@ namespace effective_plate
         break;
       }
     }
+
     // now march through matrix, zeroing out rows and columns.
     // If there is a current value on the diagonal of the constrained
     // boundary dof, don't touch it. If there is not one, then we can
@@ -747,7 +932,7 @@ namespace effective_plate
     }
     else
     {
-      SolverControl solver_control(dof_handler.n_dofs(), 1e-11);
+      SolverControl solver_control(dof_handler.n_dofs(), 1e-8);
       SolverCG<> solver(solver_control);
       solver.solve(system_matrix, newton_update, system_rhs, PreconditionIdentity());
     }
@@ -1237,6 +1422,31 @@ namespace effective_plate
 
     out << std::endl;
     out << "Norm of the difference: " << diffNorm << std::endl;
+
+    out.close();
+
+
+  }
+
+  void PlateProblem::output_matrix_csv()
+  {
+    assemble_system_matrix();
+    apply_boundaries_and_constraints_system_matrix(&homo_dofs);
+
+    std::ofstream out("system_matrix.csv");
+    unsigned int numberDofs = dof_handler.n_dofs();
+
+
+    for(unsigned int i = 0; i < numberDofs; i++)
+    {
+      for(unsigned int j = 0; j < numberDofs; j++)
+      {
+        out << system_matrix.el(i,j);
+        if(j != numberDofs - 1)
+          out << ", ";
+      }
+      out << std::endl;
+    }
 
     out.close();
 

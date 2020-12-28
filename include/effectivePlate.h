@@ -57,9 +57,9 @@
 
 #include <deal.II/lac/trilinos_sparse_matrix.h>
 
-
-
-#include <deal.II/lac/trilinos_sparse_matrix.h>
+#include <deal.II/lac/petsc_sparse_matrix.h>
+#include <deal.II/lac/petsc_parallel_vector.h>
+#include <deal.II/lac/slepc_solver.h>
 
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
@@ -172,6 +172,8 @@ namespace effective_plate
 
     void setup_system_constraints();
 
+    void make_symmetry_constraints();
+
     void apply_boundaries_to_rhs(Vector<double> *rhs, std::vector<bool> *homogenous_dirichlet_dofs);
 
     double line_search_and_add_step_length(double last_residual, std::vector<bool> *homogenous_dirichlet_dofs);
@@ -179,6 +181,7 @@ namespace effective_plate
     void assemble_system_energy();
     void assemble_system_rhs();
     void assemble_system_matrix();
+    unsigned int get_system_eigenvalues(const int cycle);
 
     void apply_boundaries_and_constraints_system_matrix(std::vector<bool> *homogenous_dirichlet_dofs);
 
@@ -188,6 +191,8 @@ namespace effective_plate
                             int const maxSize, int* const endOfFileFlag);
 
     void add_small_perturbations(double amplitude, bool firstTime);
+
+    void output_matrix_csv();
 
     void set_displacement(double value)
     {
@@ -210,6 +215,9 @@ namespace effective_plate
 
     SparsityPattern      sparsity_pattern;
     SparseMatrix<double> system_matrix;
+
+    PETScWrappers::SparseMatrix    system_matrix_petsc;
+
 
     plate_energy PE;
 

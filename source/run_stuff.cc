@@ -5,6 +5,8 @@ using namespace dealii;
 int main (int argc, char** argv)
 {
 
+  Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
+
   effective_plate::PlateProblem  pp;
 
   char fileName[MAXLINE];
@@ -34,8 +36,8 @@ int main (int argc, char** argv)
 //  ep.compute_and_compare_second_numer_deriv(1e-5);
 
 
-//  pp.rhs_numerical_deriv(1e-9);
-//  pp.compute_and_compare_second_numer_deriv(1e-9);
+  pp.rhs_numerical_deriv(1e-9);
+  pp.compute_and_compare_second_numer_deriv(1e-9);
 
   pp.solve_forward_problem();
 
