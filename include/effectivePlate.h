@@ -184,6 +184,7 @@ namespace effective_plate
     unsigned int get_system_eigenvalues(const int cycle);
 
     void apply_boundaries_and_constraints_system_matrix(std::vector<bool> *homogenous_dirichlet_dofs);
+    void apply_boundaries_and_eigen_constraints_system_matrix(std::vector<bool> *homogenous_dirichlet_dofs);
 
     void solve();
 
@@ -212,6 +213,9 @@ namespace effective_plate
     Quadrature<DIM>      *quadrature_formula = NULL;
 
     ConstraintMatrix     constraints;
+
+    ConstraintMatrix     constraints_eigen;
+
 
     SparsityPattern      sparsity_pattern;
     SparseMatrix<double> system_matrix;

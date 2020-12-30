@@ -112,7 +112,7 @@ namespace effective_plate
     :
     dof_handler (triangulation),
     fe (FESystem<DIM>(FE_Q<DIM>(1), DIM), 1,
-         FE_Q<DIM>(3), 1)
+         FE_Q<DIM>(1), 1, FE_Q<DIM>(1), 1, FE_Q<DIM>(1), 1)
   {}
 
 
@@ -165,11 +165,11 @@ namespace effective_plate
 
     present_solution.reinit (dof_handler.n_dofs());
 
-    setup_system_constraints();
 
     newton_update.reinit(dof_handler.n_dofs());
     system_rhs.reinit (dof_handler.n_dofs());
 
+    setup_system_constraints();
     DynamicSparsityPattern dsp(dof_handler.n_dofs(), dof_handler.n_dofs());
     DoFTools::make_sparsity_pattern(dof_handler,
                                     dsp,
@@ -198,19 +198,39 @@ namespace effective_plate
     MappingQ1<DIM> mapping;
     DoFTools::map_dofs_to_support_points(mapping, dof_handler, support_points);
 
-    std::vector<bool> x1_components = {true, false, false};
-     ComponentMask x1_mask(x1_components);
+    std::vector<bool> x1_components = {true, false, false, false, false};
+    ComponentMask x1_mask(x1_components);
+    std::vector<bool> is_x1_comp(number_dofs);
+    DoFTools::extract_dofs(dof_handler, x1_mask, is_x1_comp);
 
-     std::vector<bool> is_x1_comp(number_dofs);
+    std::vector<bool> x2_components = {false, true, false, false, false};
+    ComponentMask x2_mask(x2_components);
+    std::vector<bool> is_x2_comp(number_dofs);
+    DoFTools::extract_dofs(dof_handler, x2_mask, is_x2_comp);
 
-     DoFTools::extract_dofs(dof_handler, x1_mask, is_x1_comp);
+    std::vector<bool> w_components = {false, false, true, false , false};
+    ComponentMask w_mask(w_components);
+    std::vector<bool> is_w_comp(number_dofs);
+    DoFTools::extract_dofs(dof_handler, w_mask, is_w_comp);
 
-     std::vector<bool> w_components = {false, false, true};
-      ComponentMask w_mask(w_components);
+    std::vector<bool> v_components = {false, false, false, true , false};
+    ComponentMask v_mask(v_components);
+    std::vector<bool> is_v_comp(number_dofs);
+    DoFTools::extract_dofs(dof_handler, v_mask, is_v_comp);
 
-      std::vector<bool> is_w_comp(number_dofs);
+    std::vector<bool> lam_components = {false, false, false, false , true};
+    ComponentMask lam_mask(lam_components);
+    std::vector<bool> is_lam_comp(number_dofs);
+    DoFTools::extract_dofs(dof_handler, lam_mask, is_lam_comp);
 
-      DoFTools::extract_dofs(dof_handler, w_mask, is_w_comp);
+    std::vector<bool> all_components = {true, true, true, true , true};
+    ComponentMask all_mask(all_components);
+    std::vector<bool> boundary_dof (number_dofs, false);
+
+
+    DoFTools::extract_boundary_dofs(dof_handler,
+        all_mask,
+        boundary_dof);
 
 
      for(unsigned int  i = 0; i < number_dofs; i ++)
@@ -219,7 +239,8 @@ namespace effective_plate
        {
          if(fabs(support_points[i](0)) < 1.0e-6)
          {
-           homo_dofs[i] = true;
+           if(is_x1_comp[i] || is_x2_comp[i] || is_w_comp[i])
+             homo_dofs[i] = true;
          }
 
          if(fabs(support_points[i](0) - domain_dimensions[0]) < 1.0e-6)
@@ -227,12 +248,13 @@ namespace effective_plate
            if(is_x1_comp[i] == true)
              load_dofs[i] = true;
 
-           homo_dofs[i] = true;
+           if(is_x1_comp[i] || is_x2_comp[i] || is_w_comp[i])
+             homo_dofs[i] = true;
          }
 
        }
 
-       // do the extra point we are constraining
+       // do the extra points we are constraining
        if(fabs( support_points[i](0) - domain_dimensions[0]/2.0) < 1.0e-6 &&
            (fabs(support_points[i](1)) < 1.0e-6  || fabs(support_points[i](1) - domain_dimensions[1]) < 1.0e-6)
                && is_w_comp[i] == true)
@@ -240,14 +262,18 @@ namespace effective_plate
          homo_dofs[i] = true;
        }
 
+       if(boundary_dof[i] && (is_v_comp[i] || is_lam_comp[i]))
+         homo_dofs[i] = true;
+
      }
+
+//    assemble_system_matrix();
+//    setup_system_constraints();
   }
 
 
   void PlateProblem::setup_system_constraints ()
   {
-
-    constraints.clear ();
 
     const unsigned int   number_dofs = dof_handler.n_dofs();
 
@@ -282,8 +308,167 @@ namespace effective_plate
 //
 //    }
 
+//    std::vector<Point<DIM>> support_points(dof_handler.n_dofs());
+//    MappingQ1<DIM> mapping;
+//    DoFTools::map_dofs_to_support_points(mapping, dof_handler, support_points);
+//
+//
+//    std::vector<bool> x1_components = {true, false, false, false, false};
+//    ComponentMask x1_mask(x1_components);
+//    std::vector<bool> is_x1_comp(number_dofs);
+//    DoFTools::extract_dofs(dof_handler, x1_mask, is_x1_comp);
+//
+//    std::vector<bool> x2_components = {false, true, false, false, false};
+//    ComponentMask x2_mask(x2_components);
+//    std::vector<bool> is_x2_comp(number_dofs);
+//    DoFTools::extract_dofs(dof_handler, x2_mask, is_x2_comp);
+//
+//    std::vector<bool> w_components = {false, false, true, false , false};
+//    ComponentMask w_mask(w_components);
+//    std::vector<bool> is_w_comp(number_dofs);
+//    DoFTools::extract_dofs(dof_handler, w_mask, is_w_comp);
+//
+//    std::vector<bool> v_components = {false, false, false, true, false};
+//    ComponentMask v_mask(v_components);
+//    std::vector<bool> is_v_comp(number_dofs);
+//    DoFTools::extract_dofs(dof_handler, v_mask, is_v_comp);
+//
+//    std::vector<bool> lam_components = {false, false, false, false, true};
+//    ComponentMask lam_mask(lam_components);
+//    std::vector<bool> is_lam_comp(number_dofs);
+//    DoFTools::extract_dofs(dof_handler, lam_mask, is_lam_comp);
+//
+//    for (unsigned int i=0; i<dof_handler.n_dofs(); ++i)
+//    {
+//      if(is_v_comp[i] == true)
+//      {
+//        for (unsigned int k = 0; k < dof_handler.n_dofs(); ++k)
+//        {
+//          if( is_lam_comp[k] == true &&
+//              (support_points[i](0) - support_points[k](0))*(support_points[i](0) - support_points[k](0)) < 1.0e-6 &&
+//              (support_points[i](1) - support_points[k](1))*(support_points[i](1) - support_points[k](1)) < 1.0e-6)
+//            {
+//              constraints.add_line (i);
+//              constraints.add_entry (i, k, B);
+//              break;
+//            }
+//        }
+//      }
+//    }
+//
+//    constraints.close ();
 
-    constraints.close ();
+    std::vector<bool> x1_components = {true, false, false, false, false};
+    ComponentMask x1_mask(x1_components);
+    std::vector<bool> is_x1_comp(number_dofs);
+    DoFTools::extract_dofs(dof_handler, x1_mask, is_x1_comp);
+
+    std::vector<bool> x2_components = {false, true, false, false, false};
+    ComponentMask x2_mask(x2_components);
+    std::vector<bool> is_x2_comp(number_dofs);
+    DoFTools::extract_dofs(dof_handler, x2_mask, is_x2_comp);
+
+    std::vector<bool> w_components = {false, false, true, false , false};
+    ComponentMask w_mask(w_components);
+    std::vector<bool> is_w_comp(number_dofs);
+    DoFTools::extract_dofs(dof_handler, w_mask, is_w_comp);
+
+    std::vector<bool> v_components = {false, false, false, true, false};
+    ComponentMask v_mask(v_components);
+    std::vector<bool> is_v_comp(number_dofs);
+    DoFTools::extract_dofs(dof_handler, v_mask, is_v_comp);
+
+    std::vector<bool> lam_components = {false, false, false, false, true};
+    ComponentMask lam_mask(lam_components);
+    std::vector<bool> is_lam_comp(number_dofs);
+    DoFTools::extract_dofs(dof_handler, lam_mask, is_lam_comp);
+
+    constraints_eigen.clear();
+
+    std::vector<Point<DIM>> support_points(dof_handler.n_dofs());
+    MappingQ1<DIM> mapping;
+    DoFTools::map_dofs_to_support_points(mapping, dof_handler, support_points);
+
+    for (unsigned int i=0; i<dof_handler.n_dofs(); ++i)
+    {
+//      if(is_lam_comp[i] == true)
+//      {
+//        for (unsigned int k = 0; k < dof_handler.n_dofs(); ++k)
+//        {
+//          if( is_v_comp[k] == true &&
+//              (support_points[i](0) - support_points[k](0))*(support_points[i](0) - support_points[k](0)) < 1.0e-6 &&
+//              (support_points[i](1) - support_points[k](1))*(support_points[i](1) - support_points[k](1)) < 1.0e-6)
+//          {
+////            constraints_eigen.add_line (i);
+////            constraints_eigen.add_entry (i, k, -B);
+////            constraints.add_line (i);
+////            constraints.add_entry (i, k, -B);
+//            break;
+//          }
+//        }
+
+//      if(is_w_comp[i] == true && support_points[i](1) > 1.0e-6 + domain_dimensions[1]/2.0)
+//      {
+//        for (unsigned int k = 0; k < dof_handler.n_dofs(); ++k)
+//        {
+//          if( is_w_comp[k] == true &&
+//              (support_points[i](0) - support_points[k](0))*(support_points[i](0) - support_points[k](0)) < 1.0e-6 &&
+//              ( ((support_points[i](1) - domain_dimensions[1]/2.0) - (domain_dimensions[1]/2.0 - support_points[k](1)))
+//                 *((support_points[i](1) - domain_dimensions[1]/2.0) - (domain_dimensions[1]/2.0 - support_points[k](1)))
+//                   < 1.0e-6))
+//          {
+//                        constraints_eigen.add_line (i);
+//                        constraints_eigen.add_entry (i, k, 1.0);
+//                        constraints.add_line (i);
+//                        constraints.add_entry (i, k, 1.0);
+//            break;
+//          }
+//        }
+//      }
+    }
+
+
+
+//    for (unsigned int row = 0; row < system_matrix.m(); ++row)
+//    {
+//      if(is_lam_comp[row] == true)
+//      {
+//        double first_entry = 0.0;
+//        unsigned int constraint_dof = 0;
+////        bool firstFlag = false;
+//
+//        first_entry = system_matrix.el(row, row - 2);
+//        constraint_dof = row - 2;
+//        constraints_eigen.add_line(constraint_dof);
+//        const typename SparseMatrix<double>::const_iterator end_row = system_matrix.end(row);
+//        for (typename SparseMatrix<double>::const_iterator entry = system_matrix.begin(row);
+//                               entry != end_row; ++entry)
+//         {
+//
+////           if((is_w_comp[entry->column()] || is_v_comp[entry->column()]) && fabs(entry->value()) > 1.0e-12 )
+////           {
+////             if(firstFlag == false)
+////             {
+////               first_entry = entry->value();
+////               constraint_dof = entry->column();
+////               constraints_eigen.add_line(constraint_dof);
+////               firstFlag = true;
+////             }
+//          if((is_w_comp[entry->column()] || is_v_comp[entry->column()])) // && fabs(entry->value()) > 1.0e-12 )
+//          {
+//             if(entry->column() == row - 2)
+//               continue;
+//             else
+//             {
+//               constraints_eigen.add_entry (constraint_dof, entry->column(), -entry->value()/first_entry);
+//             }
+//           }
+//         }
+//      }
+//    }
+    constraints_eigen.close ();
+
+    constraints.close();
 
     // now do hanging nodes. Because some of the constraints might refer to the same dof
     // for both the symmetry constraint and the hanging node constraint, we will make them
@@ -306,38 +491,61 @@ namespace effective_plate
     double E0 = 0.0;
     assemble_system_energy();
     E0 = system_energy;
+    previous_solution = present_solution;
+    Vector<double> dpred = present_solution;
+
+    bool updateFlag = true;
 
     for(unsigned int i = 0; i < load_steps; i ++)
     {
+
       current_load_value = du*i;
       set_displacement(current_load_value);
 
+      previous_solution = present_solution;
+
+//      present_solution += dpred;
+
       std::cout << "  Iteration : " << i+1 << std::endl;
       newton_iterate();
+
+      dpred = present_solution;
+      dpred -= previous_solution;
 
       unsigned int num_neg_eigs;
 
 //      output_matrix_csv();
 //      exit(-1);
-      if(i == 0)
+//      if(i == 0)
+      if(updateFlag)
+      {
         num_neg_eigs = get_system_eigenvalues(-1);
-      std::cout << "      Number of negative eigenvalues is : " << num_neg_eigs << std::endl;
+        std::cout << "      Number of negative eigenvalues is : " << num_neg_eigs << std::endl;
+      }
+      if(num_neg_eigs > 0)
+        updateFlag = false;
 
       output_results(i);
+//      output_matrix_csv();
+//      if(num_neg_eigs > 0)
+//        break;
 
-      output_matrix_csv();
 
-      break;
-      exit(-1);
+//      present_solution *= 2.0;
+//      present_solution -= previous_solution;
+//      exit(-1);
     }
 
+//    evaluation_point = present_solution;
+//    assemble_system_energy();
+//    double E1 = system_energy;
+//
+//    std::cout << "Old Energy : " << E0 << std::endl;
+//    std::cout << "New Energy : " << E1 << std::endl;
+//
+//    newton_iterate();
+//    output_results(9999);
 
-    evaluation_point = present_solution;
-    assemble_system_energy();
-    double E1 = system_energy;
-
-    std::cout << "Old Energy : " << E0 << std::endl;
-    std::cout << "New Energy : " << E1 << std::endl;
 
 
   }
@@ -410,7 +618,7 @@ namespace effective_plate
 
     double current_residual = 0.0;
     double lineSearchLength;
-    for(lineSearchLength = 0.9; lineSearchLength > 1e-5; lineSearchLength *=0.5)
+    for(lineSearchLength = 1.0; lineSearchLength > 1.0e-3; lineSearchLength *=0.5)
     {
       evaluation_point = present_solution;
       evaluation_point.add(lineSearchLength, newton_update);
@@ -428,7 +636,7 @@ namespace effective_plate
       }
 
     }
-    if(lineSearchLength < 1e-5)
+    if(lineSearchLength < 1e-3)
     {
       std::cout << "THERE WAS A PROBLEM!!" << std::endl;
     }
@@ -446,7 +654,8 @@ namespace effective_plate
 
     evaluation_point = present_solution;
     assemble_system_matrix();
-    apply_boundaries_and_constraints_system_matrix(&homo_dofs);
+//    apply_boundaries_and_eigen_constraints_system_matrix(&homo_dofs);
+    apply_boundaries_and_eigen_constraints_system_matrix(&homo_dofs);
 
     LAPACKFullMatrix<double> system_matrix_full;
     system_matrix_full.copy_from(system_matrix);
@@ -454,25 +663,71 @@ namespace effective_plate
     Vector<double> eigenvalues;
     FullMatrix<double> eigenvectors;
 
-    double tol = 1.0e-7;
+    double tol = 1.0e-9;
 
-    system_matrix_full.compute_eigenvalues_symmetric(-10, 10000, tol, eigenvalues, eigenvectors);
+    system_matrix_full.compute_eigenvalues_symmetric(-10, 0.3, tol, eigenvalues, eigenvectors);
 
     unsigned int num_neg_eigs = 0;
     for(unsigned int i = 0; i < eigenvalues.size(); i ++)
     {
-      std::cout << eigenvalues[i] << std::endl;
+//      std::cout << eigenvalues[i] << std::endl;
 
-      if(eigenvalues[i] < -tol)
+      if(eigenvalues[i] < -1.0e-6)
         num_neg_eigs ++;
     }
 
+    double number_dofs = dof_handler.n_dofs();
+    std::vector<bool> lam_components = {false, false, false, false, true};
+    ComponentMask lam_mask(lam_components);
+    std::vector<bool> is_lam_comp(number_dofs);
+    DoFTools::extract_dofs(dof_handler, lam_mask, is_lam_comp);
+    unsigned int total_found = 0;
+    unsigned int need_to_find = 0;
     for(unsigned int i = 0; i < dof_handler.n_dofs(); i ++)
+      if(is_lam_comp[i])
+        need_to_find++;
+    if(num_neg_eigs > 0)
     {
-      present_solution[i] = eigenvectors[i][0];
+      Vector<double> dest(dof_handler.n_dofs());
+      Vector<double> next_eig(dof_handler.n_dofs());
+
+      for(unsigned int k = 0; k < num_neg_eigs; k ++)
+      {
+        double next_tot = 0.0;
+        for(unsigned int i = 0; i < dof_handler.n_dofs(); i ++)
+        {
+          next_eig[i] = eigenvectors[i][k];
+        }
+        apply_boundaries_to_rhs(&next_eig, &homo_dofs);
+        constraints_eigen.distribute(next_eig);
+
+        system_matrix.vmult(dest, next_eig);
+
+        for(unsigned int i = 0; i < number_dofs; i ++)
+        {
+          if(lam_components[i] == true)
+          {
+            next_tot += dest[i]*dest[i];
+
+          }
+        }
+//        std::cout << "Eigenvalue : " << k << "  Value : " << eigenvalues[k] << "Total : " << sqrt(next_tot) << std::endl;
+        if(sqrt(next_tot) < 1.0e-6)
+        {
+          total_found ++;
+          present_solution.add(0.1, next_eig);
+          std::cout << "  Negaitve Eigenvalue : " << eigenvalues[k] << std::endl;
+          break;
+//          std::cout << "     <<<<<<< Found one >>>>>>>" << std::endl;
+        }
+      }
     }
 
-    apply_boundaries_to_rhs(&present_solution, &homo_dofs);
+    num_neg_eigs = total_found;
+//    std::cout << "\n\n TOTAL FOUND : " << total_found << "   NEEDE TO FIND : " << need_to_find << std::endl;
+//    std::cout << "COWS : " << present_solution[538] << " " << present_solution[539] << std::endl;
+//    std::cout << "COWS : " << present_solution[538] << " " << present_solution[539] << std::endl;
+
 
 //    std::vector<PETScWrappers::MPI::Vector> eigenfunctions;
 //    std::vector<double>                     eigenvalues;
@@ -587,13 +842,19 @@ namespace effective_plate
 
     std::vector<Tensor<2,DIM>> displacement_gradients(n_q_points);
     std::vector<Tensor<1, DIM>> w_gradients(n_q_points);
-    std::vector<Tensor<2, DIM>> w_hessians(n_q_points);
+    std::vector<Tensor<1, DIM>> lam_gradients(n_q_points);
+    std::vector<double> v_values(n_q_points);
+    std::vector<double> lam_values(n_q_points);
+
+//    std::vector<Tensor<2, DIM>> w_hessians(n_q_points);
 
 
     std::vector<types::global_dof_index> local_dof_indices (dofs_per_cell);
 
     const FEValuesExtractors::Vector displacements (0);
     const FEValuesExtractors::Scalar w (DIM);
+    const FEValuesExtractors::Scalar v (DIM+1);
+    const FEValuesExtractors::Scalar lam (DIM+2);
 
     std::vector<double> wx(n_q_points);
     std::vector<double> wy(n_q_points);
@@ -608,7 +869,11 @@ namespace effective_plate
 
       fe_values[displacements].get_function_gradients(evaluation_point, displacement_gradients);
       fe_values[w].get_function_gradients(evaluation_point, w_gradients);
-      fe_values[w].get_function_hessians(evaluation_point, w_hessians);
+      fe_values[lam].get_function_gradients(evaluation_point, lam_gradients);
+      fe_values[v].get_function_values(evaluation_point, v_values);
+      fe_values[lam].get_function_values(evaluation_point, lam_values);
+
+//      fe_values[w].get_function_hessians(evaluation_point, w_hessians);
 
       eval_wx.value_list (fe_values.get_quadrature_points(), wx);
       eval_wy.value_list (fe_values.get_quadrature_points(), wy);
@@ -620,8 +885,10 @@ namespace effective_plate
       {
         PE.set_params(wx[q_point], wy[q_point], lx, ly, delta);
         get_F(displacement_gradients[q_point], F);
-        double lap_w = trace(w_hessians[q_point]);
+        double lap_w = v_values[q_point]; //trace(w_hessians[q_point]);
         system_energy += PE.get_E(F, w_gradients[q_point], lap_w)*fe_values.JxW(q_point);
+        system_energy += (lam_gradients[q_point]*w_gradients[q_point] + lam_values[q_point]*v_values[q_point])*fe_values.JxW(q_point);
+
       }
     }
 
@@ -645,7 +912,11 @@ namespace effective_plate
 
     std::vector<Tensor<2,DIM>> displacement_gradients(n_q_points);
     std::vector<Tensor<1, DIM>> w_gradients(n_q_points);
-    std::vector<Tensor<2, DIM>> w_hessians(n_q_points);
+    std::vector<Tensor<1, DIM>> lam_gradients(n_q_points);
+    std::vector<double> v_values(n_q_points);
+    std::vector<double> lam_values(n_q_points);
+
+//    std::vector<Tensor<2, DIM>> w_hessians(n_q_points);
 
     std::vector<double> wx(n_q_points);
     std::vector<double> wy(n_q_points);
@@ -654,6 +925,9 @@ namespace effective_plate
 
     const FEValuesExtractors::Vector displacements (0);
     const FEValuesExtractors::Scalar w (DIM);
+    const FEValuesExtractors::Scalar v (DIM+1);
+    const FEValuesExtractors::Scalar lam (DIM+2);
+
 
     Tensor<2,DIM> F;
 
@@ -671,7 +945,11 @@ namespace effective_plate
 
       fe_values[displacements].get_function_gradients(evaluation_point, displacement_gradients);
       fe_values[w].get_function_gradients(evaluation_point, w_gradients);
-      fe_values[w].get_function_hessians(evaluation_point, w_hessians);
+      fe_values[lam].get_function_gradients(evaluation_point, lam_gradients);
+      fe_values[v].get_function_values(evaluation_point, v_values);
+      fe_values[lam].get_function_values(evaluation_point, lam_values);
+
+//      fe_values[w].get_function_hessians(evaluation_point, w_hessians);
 
       eval_wx.value_list (fe_values.get_quadrature_points(), wx);
       eval_wy.value_list (fe_values.get_quadrature_points(), wy);
@@ -684,7 +962,7 @@ namespace effective_plate
 
         PE.set_params(wx[q_point], wy[q_point], lx, ly, delta);
         get_F(displacement_gradients[q_point], F);
-        double lap_w = trace(w_hessians[q_point]);
+        double lap_w = 0.0; // trace(w_hessians[q_point]);
 
         double JxW = fe_values.JxW(q_point);
 
@@ -696,8 +974,13 @@ namespace effective_plate
         for (unsigned int n = 0; n < dofs_per_cell; ++n)
         {
           cell_rhs(n) -= de_dat.dW_dgrad_w*fe_values[w].gradient(n, q_point)*JxW;
+          cell_rhs(n) -= lam_gradients[q_point]*fe_values[w].gradient(n, q_point)*JxW;
 
-          cell_rhs(n) -= de_dat.dW_dlap_w*trace(fe_values[w].hessian(n, q_point))*JxW;
+          cell_rhs(n) -= (B*v_values[q_point] + lam_values[q_point])*fe_values[v].value(n, q_point)*JxW;
+          cell_rhs(n) -= w_gradients[q_point]*fe_values[lam].gradient(n, q_point)*JxW;
+          cell_rhs(n) -= v_values[q_point]*fe_values[lam].value(n, q_point)*JxW;
+
+//          cell_rhs(n) -= de_dat.dW_dlap_w*trace(fe_values[w].hessian(n, q_point))*JxW;
 
           for(unsigned int i = 0; i<DIM; ++i)
             for(unsigned int j = 0; j<DIM; ++j)
@@ -744,13 +1027,15 @@ namespace effective_plate
 
     std::vector<Tensor<2,DIM>> displacement_gradients(n_q_points);
     std::vector<Tensor<1, DIM>> w_gradients(n_q_points);
-    std::vector<Tensor<2, DIM>> w_hessians(n_q_points);
+//    std::vector<Tensor<2, DIM>> w_hessians(n_q_points);
 
 
     std::vector<types::global_dof_index> local_dof_indices (dofs_per_cell);
 
     const FEValuesExtractors::Vector displacements (0);
     const FEValuesExtractors::Scalar w (DIM);
+    const FEValuesExtractors::Scalar v (DIM+1);
+    const FEValuesExtractors::Scalar lam (DIM+2);
 
     Tensor<2,DIM> F;
 
@@ -774,7 +1059,7 @@ namespace effective_plate
 
       fe_values[displacements].get_function_gradients(evaluation_point, displacement_gradients);
       fe_values[w].get_function_gradients(evaluation_point, w_gradients);
-      fe_values[w].get_function_hessians(evaluation_point, w_hessians);
+//      fe_values[w].get_function_hessians(evaluation_point, w_hessians);
 
       eval_wx.value_list (fe_values.get_quadrature_points(), wx);
       eval_wy.value_list (fe_values.get_quadrature_points(), wy);
@@ -785,7 +1070,7 @@ namespace effective_plate
       {
         PE.set_params(wx[q_point], wy[q_point], lx, ly, delta);
         get_F(displacement_gradients[q_point], F);
-        double lap_w = trace(w_hessians[q_point]);
+        double lap_w = 0.0; //trace(w_hessians[q_point]);
 
         double JxW = fe_values.JxW(q_point);
 
@@ -794,8 +1079,17 @@ namespace effective_plate
         for (unsigned int n = 0; n < dofs_per_cell; ++n)
           for (unsigned int m = 0; m < dofs_per_cell; ++m)
           {
-            cell_matrix(n,m) += dde_dat.d2W_d2lap_w*trace(fe_values[w].hessian(m, q_point))
-                                *trace(fe_values[w].hessian(n, q_point))*JxW;
+//            cell_matrix(n,m) += dde_dat.d2W_d2lap_w*trace(fe_values[w].hessian(m, q_point))
+//                                *trace(fe_values[w].hessian(n, q_point))*JxW;
+
+            cell_matrix(n,m) += B*fe_values[v].value(m, q_point)*fe_values[v].value(n, q_point)*JxW;
+
+            cell_matrix(n,m) += fe_values[lam].value(m, q_point)*fe_values[v].value(n, q_point)*JxW;
+            cell_matrix(n,m) += fe_values[lam].value(n, q_point)*fe_values[v].value(m, q_point)*JxW;
+
+            cell_matrix(n,m) += fe_values[lam].gradient(n, q_point)*fe_values[w].gradient(m, q_point)*JxW;
+            cell_matrix(n,m) += fe_values[lam].gradient(m, q_point)*fe_values[w].gradient(n, q_point)*JxW;
+
 
             for(unsigned int i = 0; i < DIM; i ++)
               for(unsigned int j = 0; j < DIM; j ++)
@@ -857,27 +1151,53 @@ namespace effective_plate
   {
     constraints.condense (system_matrix);
 
-//    std::map<types::global_dof_index,double> boundary_values;
-//
-//    std::vector<bool> side1_components = {true, true, true };
-//
-//    ComponentMask side1_mask(side1_components);
-//
-//    VectorTools::interpolate_boundary_values (dof_handler,
-//                                              1,
-//                                              ZeroFunction<DIM, double>(DIM + 1),
-//                                              boundary_values,
-//                                              side1_mask);
-//    VectorTools::interpolate_boundary_values (dof_handler,
-//                                              2,
-//                                              ZeroFunction<DIM, double>(DIM + 1),
-//                                              boundary_values,
-//                                              side1_mask);
-//
-//    MatrixTools::apply_boundary_values (boundary_values,
-//                                        system_matrix,
-//                                        newton_update,
-//                                        system_rhs);
+
+    unsigned int m = system_matrix.m();
+    // set values on the diagonal to the first diagonal element,
+    // or 1 if it is nonexistent
+    // This all follows the dealii built in apply_boundaries closely
+    double first_nonzero_diagonal_entry = 1.0;
+    for (unsigned int i=0; i<m; ++i)
+    {
+      if (system_matrix.diag_element(i) != 0.0)
+      {
+        first_nonzero_diagonal_entry = fabs(system_matrix.diag_element(i));
+        break;
+      }
+    }
+
+    // now march through matrix, zeroing out rows and columns.
+    // If there is a current value on the diagonal of the constrained
+    // boundary dof, don't touch it. If there is not one, then we can
+    // just set it equal to the first nonzero entry we just found
+    for (unsigned int row = 0; row < m; ++row)
+    {
+
+      const typename SparseMatrix<double>::iterator end_row = system_matrix.end(row);
+      for (typename SparseMatrix<double>::iterator entry = system_matrix.begin(row);
+                    entry != end_row; ++entry)
+      {
+        if(((*homogenous_dofs)[row] == true || (*homogenous_dofs)[entry->column()] == true)
+            && (row != entry->column()))
+        {
+          entry->value() = 0.0;
+        }
+        else if((*homogenous_dofs)[row] == true
+          && (row == entry->column()))
+        {
+          entry->value() = first_nonzero_diagonal_entry;
+        }
+
+      }
+
+    }
+
+  }
+
+  void PlateProblem::apply_boundaries_and_eigen_constraints_system_matrix(std::vector<bool> *homogenous_dofs)
+  {
+    constraints_eigen.condense (system_matrix);
+
 
     unsigned int m = system_matrix.m();
     // set values on the diagonal to the first diagonal element,
@@ -967,11 +1287,15 @@ namespace effective_plate
 
 
     std::vector<std::string> solutionNames(DIM, "u");
-    solution_names.emplace_back("w");
+    solution_names.push_back("w");
+    solution_names.push_back("v");
+    solution_names.push_back("lam");
 
     std::vector<DataComponentInterpretation::DataComponentInterpretation>
       interpretation(DIM,
                      DataComponentInterpretation::component_is_part_of_vector);
+    interpretation.push_back(DataComponentInterpretation::component_is_scalar);
+    interpretation.push_back(DataComponentInterpretation::component_is_scalar);
     interpretation.push_back(DataComponentInterpretation::component_is_scalar);
 
     // output the total displacements. this requires adding in the uniform solution on top of the displacements
