@@ -111,8 +111,10 @@ namespace effective_plate
   PlateProblem::PlateProblem ()
     :
     dof_handler (triangulation),
+    dof_handler_wv (triangulation),
     fe (FESystem<DIM>(FE_Q<DIM>(1), DIM), 1,
-         FE_Q<DIM>(1), 1, FE_Q<DIM>(1), 1, FE_Q<DIM>(1), 1)
+         FE_Q<DIM>(1), 1, FE_Q<DIM>(1), 1, FE_Q<DIM>(1), 1),
+    fe_wv (FE_Q<DIM>(1), 1)
   {}
 
 
@@ -121,6 +123,8 @@ namespace effective_plate
   PlateProblem::~PlateProblem ()
   {
     dof_handler.clear ();
+    dof_handler_wv.clear ();
+
     delete quadrature_formula;
 
   }
@@ -151,6 +155,10 @@ namespace effective_plate
 
     dof_handler.distribute_dofs (fe);
 
+    dof_handler_wv.distribute_dofs (fe_wv);
+
+    std::cout << "    WV DOFS : " << dof_handler_wv.n_dofs() << std::endl;
+
     QGauss<1> quad_x(qx);
     QGauss<1> quad_y(qy);
     quadrature_formula = new QAnisotropic<DIM>(quad_x, quad_y);
@@ -179,6 +187,24 @@ namespace effective_plate
 
     sparsity_pattern.copy_from (dsp);
 
+
+//    GridTools::distort_random(0.4, triangulation, true);
+
+
+    system_matrix.reinit (sparsity_pattern);
+
+
+    DynamicSparsityPattern dsp_wv(dof_handler_wv.n_dofs(), dof_handler_wv.n_dofs());
+    DoFTools::make_sparsity_pattern(dof_handler_wv,
+                                    dsp_wv,
+                                    constraints_wv,
+                                    /*keep_constrained_dofs = */ true);
+    sparsity_pattern_wv.copy_from (dsp_wv);
+
+
+    K_wlam.reinit(sparsity_pattern_wv);
+    K_vlam.reinit(sparsity_pattern_wv);
+    K_vv.reinit(sparsity_pattern_wv);
 
 //    GridTools::distort_random(0.4, triangulation, true);
 
@@ -225,9 +251,9 @@ namespace effective_plate
 
     std::vector<bool> all_components = {true, true, true, true , true};
     ComponentMask all_mask(all_components);
+
+
     std::vector<bool> boundary_dof (number_dofs, false);
-
-
     DoFTools::extract_boundary_dofs(dof_handler,
         all_mask,
         boundary_dof);
@@ -262,10 +288,57 @@ namespace effective_plate
          homo_dofs[i] = true;
        }
 
-       if(boundary_dof[i] && (is_v_comp[i] || is_lam_comp[i]))
+       if(boundary_dof[i] && (is_v_comp[i] || is_lam_comp[i] || is_w_comp[i]))
          homo_dofs[i] = true;
 
      }
+
+     homo_dofs_w.resize(dof_handler_wv.n_dofs(), false);
+     homo_dofs_v.resize(dof_handler_wv.n_dofs(), false);
+     std::vector<Point<DIM>> support_points_wv(dof_handler_wv.n_dofs());
+     DoFTools::map_dofs_to_support_points(mapping, dof_handler_wv, support_points_wv);
+     std::vector<bool> boundary_dof_wv (dof_handler_wv.n_dofs(), false);
+     std::vector<bool> all_w_components = {true};
+     ComponentMask all_w_mask(all_w_components);
+     DoFTools::extract_boundary_dofs(dof_handler_wv, all_w_mask, boundary_dof_wv);
+
+     for(unsigned int  i = 0; i < dof_handler_wv.n_dofs(); i ++)
+     {
+       if(fabs( support_points_wv[i](1) - domain_dimensions[1]/2.0) < 1.0e-6)
+       {
+
+         if(fabs( support_points_wv[i](0) - domain_dimensions[0]/2.0) < 1.0e-6)
+         {
+           middle_dof = i;
+         }
+
+         if(fabs(support_points_wv[i](0)) < 1.0e-6)
+         {
+           homo_dofs_w[i] = true;
+         }
+
+         if(fabs(support_points_wv[i](0) - domain_dimensions[0]) < 1.0e-6)
+         {
+           homo_dofs_w[i] = true;
+         }
+
+
+       }
+
+       // do the extra points we are constraining
+       if(fabs( support_points_wv[i](0) - domain_dimensions[0]/2.0) < 1.0e-6 &&
+           (fabs(support_points_wv[i](1)) < 1.0e-6  || fabs(support_points_wv[i](1) - domain_dimensions[1]) < 1.0e-6))
+       {
+         homo_dofs_w[i] = true;
+       }
+
+       if(boundary_dof_wv[i] == true)
+       {
+         homo_dofs_v[i] = true;
+         homo_dofs_w[i] = true;
+       }
+     }
+
 
 //    assemble_system_matrix();
 //    setup_system_constraints();
@@ -590,7 +663,6 @@ namespace effective_plate
       // Find the step length and add it to the current solution.
       // This function also calls assemble_system_rhs() so we don't need to
       // do another rhs call.
-
       apply_boundaries_to_rhs(&newton_update, &homo_dofs);
 
       current_residual = line_search_and_add_step_length(current_residual, &homo_dofs);
@@ -652,78 +724,241 @@ namespace effective_plate
     // the output file will have appended on its name. -1 for no output. Outputs the number
     // of negative eigenvalues in the range -10 < lambda < 0.3
 
+
+    assemble_wv_matrices();
+    LAPACKFullMatrix<double> holder1(dof_handler_wv.n_dofs(), dof_handler_wv.n_dofs());
+    LAPACKFullMatrix<double> holder2(dof_handler_wv.n_dofs(), dof_handler_wv.n_dofs());
+
+    LAPACKFullMatrix<double> K_vv_full;
+    K_vv_full.copy_from(K_vv);
+    LAPACKFullMatrix<double> K_wlam_full;
+    K_wlam_full.copy_from(K_wlam);
+    LAPACKFullMatrix<double> K_vlam_full;
+    K_vlam_full.copy_from(K_vlam);
+
+    K_vlam_full.invert();
+    K_vlam_full.mmult(holder1, K_wlam_full);
+    K_vv_full.mmult(holder2, holder1);
+    K_vlam_full.Tmmult(holder1, holder2);
+    K_wlam_full.mmult(holder2, holder1);
+
     evaluation_point = present_solution;
     assemble_system_matrix();
 //    apply_boundaries_and_eigen_constraints_system_matrix(&homo_dofs);
     apply_boundaries_and_eigen_constraints_system_matrix(&homo_dofs);
 
-    LAPACKFullMatrix<double> system_matrix_full;
-    system_matrix_full.copy_from(system_matrix);
+    LAPACKFullMatrix<double> projected_mat(3*dof_handler_wv.n_dofs(), 3*dof_handler_wv.n_dofs());
+
+    double number_dofs = dof_handler.n_dofs();
+    std::vector<bool> u_components = {true, true, false, false, false};
+    ComponentMask u_mask(u_components);
+    std::vector<bool> is_u_comp(number_dofs);
+    DoFTools::extract_dofs(dof_handler, u_mask, is_u_comp);
+
+    std::vector<bool> w_components = {false, false, true, false, false};
+    ComponentMask w_mask(w_components);
+    std::vector<bool> is_w_comp(number_dofs);
+    DoFTools::extract_dofs(dof_handler, w_mask, is_w_comp);
+
+    unsigned int m = system_matrix.m();
+    for (unsigned int row = 0; row < m; ++row)
+    {
+      if(is_u_comp[row] == false && is_w_comp[row] == false)
+        continue;
+
+      unsigned int proj_indx_row = 3*(row - row%5)/5 + row%5;
+      const typename SparseMatrix<double>::iterator end_row = system_matrix.end(row);
+      for (typename SparseMatrix<double>::iterator entry = system_matrix.begin(row);
+                    entry != end_row; ++entry)
+      {
+        if(is_u_comp[entry->column()] || is_w_comp[entry->column()])
+        {
+          unsigned int proj_indx_col = 3*(entry->column() - entry->column()%5)/5 + entry->column()%5;
+
+          projected_mat(proj_indx_row, proj_indx_col) = entry->value();
+        }
+      }
+    }
+
+    for(unsigned int i = 0; i < dof_handler_wv.n_dofs(); i ++)
+    {
+      unsigned int proj_indx_i = i*3 + 2;
+      for(unsigned int j = 0; j < dof_handler_wv.n_dofs(); j ++)
+      {
+        unsigned int proj_indx_j = j*3 + 2;
+//        if(homo_dofs_wv[i] == false && homo_dofs_wv[j] == false)
+        projected_mat(proj_indx_i, proj_indx_j) += holder2(i, j);
+
+        if(homo_dofs_v[i] == true || homo_dofs_v[j] == true)
+        {
+          projected_mat(proj_indx_i, proj_indx_j) = 0.0;
+        }
+
+        if(i == j && homo_dofs_v[i] == true)
+          projected_mat(proj_indx_i, proj_indx_j) = 1.0;
+
+      }
+    }
 
     Vector<double> eigenvalues;
     FullMatrix<double> eigenvectors;
 
     double tol = 1.0e-9;
 
-    system_matrix_full.compute_eigenvalues_symmetric(-10, 0.3, tol, eigenvalues, eigenvectors);
+    projected_mat.compute_eigenvalues_symmetric(-10, 0.3, tol, eigenvalues, eigenvectors);
 
     unsigned int num_neg_eigs = 0;
+    unsigned int smallest_eig_indx = 0;
+    double smallest_eig = 1000;
     for(unsigned int i = 0; i < eigenvalues.size(); i ++)
     {
 //      std::cout << eigenvalues[i] << std::endl;
 
-      if(eigenvalues[i] < -1.0e-6)
-        num_neg_eigs ++;
-    }
-
-    double number_dofs = dof_handler.n_dofs();
-    std::vector<bool> lam_components = {false, false, false, false, true};
-    ComponentMask lam_mask(lam_components);
-    std::vector<bool> is_lam_comp(number_dofs);
-    DoFTools::extract_dofs(dof_handler, lam_mask, is_lam_comp);
-    unsigned int total_found = 0;
-    unsigned int need_to_find = 0;
-    for(unsigned int i = 0; i < dof_handler.n_dofs(); i ++)
-      if(is_lam_comp[i])
-        need_to_find++;
-    if(num_neg_eigs > 0)
-    {
-      Vector<double> dest(dof_handler.n_dofs());
-      Vector<double> next_eig(dof_handler.n_dofs());
-
-      for(unsigned int k = 0; k < num_neg_eigs; k ++)
+      double middle_disp = eigenvectors[3*middle_dof+2][i];
+      if(eigenvalues[i] < -1.0e-6 && fabs(middle_disp) > 1.0e-3)
       {
-        double next_tot = 0.0;
-        for(unsigned int i = 0; i < dof_handler.n_dofs(); i ++)
-        {
-          next_eig[i] = eigenvectors[i][k];
-        }
-        apply_boundaries_to_rhs(&next_eig, &homo_dofs);
-        constraints_eigen.distribute(next_eig);
 
-        system_matrix.vmult(dest, next_eig);
+        if(num_neg_eigs == 0)
+          smallest_eig_indx = i;
+        else if(eigenvalues[i] < eigenvalues[smallest_eig_indx])
+          smallest_eig_indx = i;
+        smallest_eig_indx = i;
+        num_neg_eigs ++;
 
-        for(unsigned int i = 0; i < number_dofs; i ++)
-        {
-          if(lam_components[i] == true)
-          {
-            next_tot += dest[i]*dest[i];
-
-          }
-        }
-//        std::cout << "Eigenvalue : " << k << "  Value : " << eigenvalues[k] << "Total : " << sqrt(next_tot) << std::endl;
-        if(sqrt(next_tot) < 1.0e-6)
-        {
-          total_found ++;
-          present_solution.add(0.1, next_eig);
-          std::cout << "  Negaitve Eigenvalue : " << eigenvalues[k] << std::endl;
-          break;
-//          std::cout << "     <<<<<<< Found one >>>>>>>" << std::endl;
-        }
       }
     }
 
-    num_neg_eigs = total_found;
+    if(num_neg_eigs > 0)
+    {
+      Vector<double> w_values(dof_handler_wv.n_dofs());
+      for(unsigned int k = 0; k < dof_handler_wv.n_dofs(); k++)
+      {
+        w_values[k] = eigenvectors[3*k+2][smallest_eig_indx];
+      }
+      double middle_disp = eigenvectors[3*middle_dof+2][smallest_eig_indx];
+      if(middle_disp < 0.0)
+        w_values *= -1.0;
+
+
+      Vector<double> v_values(dof_handler_wv.n_dofs());
+
+      Vector<double> holder_vect(dof_handler_wv.n_dofs());
+
+      K_wlam_full.vmult(holder_vect, w_values);
+      K_vlam_full.vmult(v_values, holder_vect);
+
+      v_values *= -1.0;
+      apply_boundaries_to_rhs(&v_values, &homo_dofs_v);
+      apply_boundaries_to_rhs(&w_values, &homo_dofs_w);
+
+      Vector<double> unstable_eig(dof_handler.n_dofs());
+      for(unsigned int k = 0; k < dof_handler_wv.n_dofs(); k++)
+      {
+        unstable_eig[5*k] = eigenvectors[3*k][smallest_eig_indx];
+        unstable_eig[5*k+1] = eigenvectors[3*k+1][smallest_eig_indx];
+        unstable_eig[5*k+2] = w_values[k];
+        unstable_eig[5*k+3] = v_values[k];
+        unstable_eig[5*k+4] = 0.0;
+      }
+
+      unstable_eig *= 0.1;
+      present_solution += unstable_eig;
+
+
+      // check
+
+      std::vector<bool> lam_components = {false, false, false, false, true};
+      ComponentMask lam_mask(lam_components);
+      std::vector<bool> is_lam_comp(number_dofs);
+      DoFTools::extract_dofs(dof_handler, lam_mask, is_lam_comp);
+      Vector<double> dest(dof_handler.n_dofs());
+
+      unstable_eig *= 10.0;
+
+      system_matrix.vmult(dest, unstable_eig);
+      double next_tot = 0.0;
+      for(unsigned int i = 0; i < number_dofs; i ++)
+      {
+        if(lam_components[i] == true)
+        {
+          next_tot += dest[i]*dest[i];
+        }
+      }
+      std::cout << "Eigenvalue : " << smallest_eig_indx << "  Value : " << eigenvalues[smallest_eig_indx] << " Total : " << sqrt(next_tot) << std::endl;
+
+      // another test
+      double quad_form = dest*unstable_eig;
+      std::cout << "      Quad Form : " << quad_form << std::endl;
+
+    }
+//
+//    LAPACKFullMatrix<double> system_matrix_full;
+//    system_matrix_full.copy_from(system_matrix);
+//
+//    Vector<double> eigenvalues;
+//    FullMatrix<double> eigenvectors;
+//
+//    double tol = 1.0e-9;
+//
+//    system_matrix_full.compute_eigenvalues_symmetric(-10, 0.3, tol, eigenvalues, eigenvectors);
+//
+//    unsigned int num_neg_eigs = 0;
+//    for(unsigned int i = 0; i < eigenvalues.size(); i ++)
+//    {
+////      std::cout << eigenvalues[i] << std::endl;
+//
+//      if(eigenvalues[i] < -1.0e-6)
+//        num_neg_eigs ++;
+//    }
+//
+////    double number_dofs = dof_handler.n_dofs();
+//    std::vector<bool> lam_components = {false, false, false, false, true};
+//    ComponentMask lam_mask(lam_components);
+//    std::vector<bool> is_lam_comp(number_dofs);
+//    DoFTools::extract_dofs(dof_handler, lam_mask, is_lam_comp);
+//    unsigned int total_found = 0;
+//    unsigned int need_to_find = 0;
+//    for(unsigned int i = 0; i < dof_handler.n_dofs(); i ++)
+//      if(is_lam_comp[i])
+//        need_to_find++;
+//    if(num_neg_eigs > 0)
+//    {
+//      Vector<double> dest(dof_handler.n_dofs());
+//      Vector<double> next_eig(dof_handler.n_dofs());
+//
+//      for(unsigned int k = 0; k < num_neg_eigs; k ++)
+//      {
+//        double next_tot = 0.0;
+//        for(unsigned int i = 0; i < dof_handler.n_dofs(); i ++)
+//        {
+//          next_eig[i] = eigenvectors[i][k];
+//        }
+//        apply_boundaries_to_rhs(&next_eig, &homo_dofs);
+//        constraints_eigen.distribute(next_eig);
+//
+//        system_matrix.vmult(dest, next_eig);
+//
+//        for(unsigned int i = 0; i < number_dofs; i ++)
+//        {
+//          if(lam_components[i] == true)
+//          {
+//            next_tot += dest[i]*dest[i];
+//
+//          }
+//        }
+////        std::cout << "Eigenvalue : " << k << "  Value : " << eigenvalues[k] << "Total : " << sqrt(next_tot) << std::endl;
+//        if(sqrt(next_tot) < 1.0e-6)
+//        {
+//          total_found ++;
+//          present_solution.add(0.1, next_eig);
+//          std::cout << "  Negaitve Eigenvalue : " << eigenvalues[k] << std::endl;
+//          break;
+////          std::cout << "     <<<<<<< Found one >>>>>>>" << std::endl;
+//        }
+//      }
+//    }
+//
+//    num_neg_eigs = total_found;
 //    std::cout << "\n\n TOTAL FOUND : " << total_found << "   NEEDE TO FIND : " << need_to_find << std::endl;
 //    std::cout << "COWS : " << present_solution[538] << " " << present_solution[539] << std::endl;
 //    std::cout << "COWS : " << present_solution[538] << " " << present_solution[539] << std::endl;
@@ -1135,10 +1370,96 @@ namespace effective_plate
 //    std::cout << "    Time taken by asseble system : " << time_taken << " seconds." << std::endl;
   }
 
+  void PlateProblem::assemble_wv_matrices()
+  {
+
+
+    K_wlam = 0.0;
+    K_vlam = 0.0;
+    K_vv = 0.0;
+    // Assembling the system matrix. I chose to make the rhs and system matrix assemblies separate,
+    // because we only do one at a time anyways in the newton method.
+
+    system_matrix = 0.0;
+
+    FEValues<DIM> fe_values (fe_wv, *quadrature_formula,
+        update_values   | update_gradients |
+        update_quadrature_points | update_JxW_values);
+
+    const unsigned int   dofs_per_cell = fe_wv.dofs_per_cell;
+    std::vector<types::global_dof_index> local_dof_indices (dofs_per_cell);
+
+    // unsigned int   n_q_points    = quadrature_formula.size();
+
+    unsigned int n_q_points = quadrature_formula->size();
+
+    FullMatrix<double>   cell_matrix_wlam (dofs_per_cell, dofs_per_cell);
+    FullMatrix<double>   cell_matrix_vlam (dofs_per_cell, dofs_per_cell);
+    FullMatrix<double>   cell_matrix_vv (dofs_per_cell, dofs_per_cell);
+
+
+
+    typename DoFHandler<DIM>::active_cell_iterator cell = dof_handler_wv.begin_active(),
+        endc = dof_handler_wv.end();
+    for (; cell!=endc; ++cell)
+    {
+
+      cell_matrix_wlam = 0.0;
+      cell_matrix_vlam = 0.0;
+      cell_matrix_vv = 0.0;
+
+      fe_values.reinit (cell);
+
+      unsigned int cell_index = cell->active_cell_index();
+
+      for (unsigned int q_point=0; q_point<n_q_points; ++q_point)
+      {
+        double JxW = fe_values.JxW(q_point);
+        for (unsigned int n = 0; n < dofs_per_cell; ++n)
+          for (unsigned int m = 0; m < dofs_per_cell; ++m)
+          {
+
+            cell_matrix_vv(n,m) += B*fe_values.shape_value(m, q_point)*fe_values.shape_value(n, q_point)*JxW;
+
+//            cell_matrix_vlam(n,m) += fe_values.shape_value(m, q_point)*fe_values.shape_value(n, q_point)*JxW;
+            cell_matrix_vlam(n,m) += fe_values.shape_value(n, q_point)*fe_values.shape_value(m, q_point)*JxW;
+
+            cell_matrix_wlam(n,m) += fe_values.shape_grad(n, q_point)*fe_values.shape_grad(m, q_point)*JxW;
+//            cell_matrix_wlam(n,m) += fe_values.shape_grad(m, q_point)*fe_values.shape_grad(n, q_point)*JxW;
+
+          }
+      }
+
+      cell->get_dof_indices (local_dof_indices);
+
+      for (unsigned int n=0; n<dofs_per_cell; ++n)
+        for (unsigned int m=0; m<dofs_per_cell; ++m)
+        {
+          K_wlam.add (local_dof_indices[n],
+              local_dof_indices[m],
+              cell_matrix_wlam(n,m));
+          K_vlam.add (local_dof_indices[n],
+              local_dof_indices[m],
+              cell_matrix_vlam(n,m));
+          K_vv.add (local_dof_indices[n],
+              local_dof_indices[m],
+              cell_matrix_vv(n,m));
+
+
+        }
+    }
+
+    apply_boundaries_to_matrix(K_wlam, &homo_dofs_w, false);
+    apply_boundaries_to_matrix(K_vlam, &homo_dofs_v, false);
+    apply_boundaries_to_matrix(K_vv, &homo_dofs_v, false);
+
+
+  }
+
 
   void PlateProblem::apply_boundaries_to_rhs(Vector<double> *rhs, std::vector<bool> *homogenous_dirichlet_dofs)
   {
-    for (unsigned int i = 0; i < dof_handler.n_dofs(); i++)
+    for (unsigned int i = 0; i < rhs->size(); i++)
     {
       if ((*homogenous_dirichlet_dofs)[i] == true)
       {
@@ -1239,6 +1560,57 @@ namespace effective_plate
 
     }
 
+  }
+
+  void PlateProblem::apply_boundaries_to_matrix(SparseMatrix<double> &mat,
+                       std::vector<bool> *homogenous_dofs, bool zeroFlag)
+  {
+    unsigned int m = mat.m();
+    // set values on the diagonal to the first diagonal element,
+    // or 1 if it is nonexistent
+    // This all follows the dealii built in apply_boundaries closely
+    double first_nonzero_diagonal_entry = 1.0;
+    for (unsigned int i=0; i<m; ++i)
+    {
+      if (mat.diag_element(i) != 0.0)
+      {
+        first_nonzero_diagonal_entry = fabs(mat.diag_element(i));
+        break;
+      }
+    }
+
+    if(zeroFlag)
+      first_nonzero_diagonal_entry = 0.0;
+
+    // now march through matrix, zeroing out rows and columns.
+    // If there is a current value on the diagonal of the constrained
+    // boundary dof, don't touch it. If there is not one, then we can
+    // just set it equal to the first nonzero entry we just found
+    for (unsigned int row = 0; row < m; ++row)
+    {
+
+      const typename SparseMatrix<double>::iterator end_row = mat.end(row);
+      for (typename SparseMatrix<double>::iterator entry = mat.begin(row);
+                    entry != end_row; ++entry)
+      {
+//        if(zeroFlag == false)
+        {
+          if(((*homogenous_dofs)[row] == true || (*homogenous_dofs)[entry->column()] == true)
+              && (row != entry->column()))
+          {
+            entry->value() = 0.0;
+          }
+          else if((*homogenous_dofs)[row] == true
+            && (row == entry->column()))
+          {
+            entry->value() = first_nonzero_diagonal_entry;
+          }
+        }
+
+
+      }
+
+    }
   }
 
   void PlateProblem::solve ()
@@ -1481,6 +1853,13 @@ namespace effective_plate
 
     if (stat(output_directory, &st) == -1)
       mkdir(output_directory, 0700);
+
+    std::ifstream src(filename, std::ios::binary);
+    char output_input_file[MAXLINE];
+    strcpy(output_input_file, output_directory);
+    strcat(output_input_file, "/inputFile.in");
+    std::ofstream dest(output_input_file, std::ios::binary);
+    dest << src.rdbuf();
 
   }
 

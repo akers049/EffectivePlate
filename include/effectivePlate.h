@@ -181,10 +181,18 @@ namespace effective_plate
     void assemble_system_energy();
     void assemble_system_rhs();
     void assemble_system_matrix();
+
+    void assemble_wv_matrices();
+
     unsigned int get_system_eigenvalues(const int cycle);
 
     void apply_boundaries_and_constraints_system_matrix(std::vector<bool> *homogenous_dirichlet_dofs);
     void apply_boundaries_and_eigen_constraints_system_matrix(std::vector<bool> *homogenous_dirichlet_dofs);
+
+    void apply_boundaries_to_matrix(SparseMatrix<double> &mat,
+                         std::vector<bool> *homogenous_dirichlet_dofs,
+                         bool zeroFlag = false);
+
 
     void solve();
 
@@ -208,17 +216,29 @@ namespace effective_plate
     Triangulation<DIM,DIM>   triangulation;
     DoFHandler<DIM>      dof_handler;
 
+    DoFHandler<DIM>      dof_handler_wv;
+
     FESystem<DIM>        fe;
+
+    FESystem<DIM>     fe_wv;
 
     Quadrature<DIM>      *quadrature_formula = NULL;
 
     ConstraintMatrix     constraints;
+    ConstraintMatrix     constraints_wv;
+
 
     ConstraintMatrix     constraints_eigen;
 
 
     SparsityPattern      sparsity_pattern;
     SparseMatrix<double> system_matrix;
+
+    SparsityPattern      sparsity_pattern_wv;
+    SparseMatrix<double> K_wlam;
+    SparseMatrix<double> K_vlam;
+    SparseMatrix<double> K_vv;
+
 
     PETScWrappers::SparseMatrix    system_matrix_petsc;
 
@@ -234,6 +254,9 @@ namespace effective_plate
     Vector<double>       previous_solution;
 
     std::vector<bool> homo_dofs;
+    std::vector<bool> homo_dofs_v;
+    std::vector<bool> homo_dofs_w;
+
     std::vector<bool> load_dofs;
 
     std::vector<unsigned int>  grid_dimensions;
@@ -265,6 +288,8 @@ namespace effective_plate
     unsigned int newton_max_iter = 300;
 
     double system_energy = 0.0;
+    unsigned int middle_dof = 0;
+
 
     bool firstFlag = true;
 

@@ -187,6 +187,8 @@ using namespace dealii;
 
     dde.d2W_d2grad_w += double_contract<0, 0, 1, 1>(dPhi_dC, d2C_d2w);
 
+//    std::cout << dde.d2W_d2grad_w << std::endl;
+
     dde.d2W_d2lap_w = B;
 
 
