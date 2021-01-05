@@ -184,7 +184,12 @@ namespace effective_plate
 
     void assemble_wv_matrices();
 
+
+
     unsigned int get_system_eigenvalues(const int cycle);
+
+
+    double get_rhs_loads();
 
     void apply_boundaries_and_constraints_system_matrix(std::vector<bool> *homogenous_dirichlet_dofs);
     void apply_boundaries_and_eigen_constraints_system_matrix(std::vector<bool> *homogenous_dirichlet_dofs);
@@ -291,7 +296,6 @@ namespace effective_plate
     unsigned int middle_dof = 0;
     double eps_w = 1.0e-5;
     double r_w = 30.0;
-
 
     bool firstFlag = true;
 

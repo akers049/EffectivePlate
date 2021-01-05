@@ -86,8 +86,8 @@ namespace effective_plate
      double x1 = p[0];
      double x2 = p[1];
 
-     double wy = ((ly - delta)/2.0)*(1.0 - sin(x2*M_PI)); //For dome
-     // double wy = 0.0; //For "stretchable" isotropic and anisotropic plate
+//     double wy = ((ly - delta)/2.0)*(1.0 - sin(x2*M_PI)); //For dome
+     double wy = 0.0; //For "stretchable" isotropic and anisotropic plate
 //     double wy = (ly - delta) / 2.0; //For "unstretchable isotropic plate
 
      return wy;
@@ -264,57 +264,57 @@ namespace effective_plate
 
 
 //    POINT LOADING
-    for(unsigned int  i = 0; i < number_dofs; i ++)
-    {
-      if(fabs( support_points[i](1) - domain_dimensions[1]/2.0) < 1.0e-6) //at midpoint in y-direction
-      {
-        if(fabs(support_points[i](0)) < 1.0e-6) //on left boundary
-        {
-          if(is_x1_comp[i] || is_x2_comp[i] || is_w_comp[i]) //in-plane and out-of-plane DOFs that will be homogeneous in the Newton iteration (fixed in this case)
-            homo_dofs[i] = true;
-        }
-
-        if(fabs(support_points[i](0) - domain_dimensions[0]) < 1.0e-6) //on right boundary
-        {
-          if(is_x1_comp[i] == true) //add to list of DOFs where we apply loading
-            load_dofs[i] = true;
-
-          if(is_x1_comp[i] || is_x2_comp[i] || is_w_comp[i]) //Same as above (load DOFs will also be homogeneous in the Newton iteration)
-            homo_dofs[i] = true;
-        }
-
-      }
-
-//    // EDGES FREE TO SLIDE IN Y, LEFT EDGE FIXED IN X, RIGHT DISPLACES IN X
-//    for (unsigned int i = 0; i < number_dofs; i++)
+//    for(unsigned int  i = 0; i < number_dofs; i ++)
 //    {
-//        if (fabs(support_points[i](0)) < 1.0e-6) //on left boundary
+//      if(fabs( support_points[i](1) - domain_dimensions[1]/2.0) < 1.0e-6) //at midpoint in y-direction
+//      {
+//        if(fabs(support_points[i](0)) < 1.0e-6) //on left boundary
 //        {
-//            if (is_x1_comp[i])
-//                homo_dofs[i] = true; //x-displacement DOFs that will be homogeneous in the Newton iteration (fixed in this case)
-//
-//            if (fabs(support_points[i](1) - domain_dimensions[1] / 2.0) < 1.0e-6) //at midpoint in y-direction
-//            {
-//                if (is_x2_comp[i] || is_w_comp[i]) //in-plane and out-of-plane DOFs that will be homogeneous in the Newton iteration (fixed in this case)
-//                    homo_dofs[i] = true;
-//            }
+//          if(is_x1_comp[i] || is_x2_comp[i] || is_w_comp[i]) //in-plane and out-of-plane DOFs that will be homogeneous in the Newton iteration (fixed in this case)
+//            homo_dofs[i] = true;
 //        }
 //
-//        if (fabs(support_points[i](0) - domain_dimensions[0]) < 1.0e-6) //on right boundary
+//        if(fabs(support_points[i](0) - domain_dimensions[0]) < 1.0e-6) //on right boundary
 //        {
-//            if (is_x1_comp[i] == true) // Add to list of DOFs where we apply loading
-//            {
-//                load_dofs[i] = true;
-//                homo_dofs[i] = true; // Load DOFs will also be homogeneous in the Newton iteration
-//            }
-//            if (fabs(support_points[i](1) - domain_dimensions[1] / 2.0) < 1.0e-6) //at midpoint in y-direction
-//            {
-//                if (is_x2_comp[i] || is_w_comp[i]) //Same as above
-//                    homo_dofs[i] = true;
-//            }
+//          if(is_x1_comp[i] == true) //add to list of DOFs where we apply loading
+//            load_dofs[i] = true;
 //
-//
+//          if(is_x1_comp[i] || is_x2_comp[i] || is_w_comp[i]) //Same as above (load DOFs will also be homogeneous in the Newton iteration)
+//            homo_dofs[i] = true;
 //        }
+//
+//      }
+
+    // EDGES FREE TO SLIDE IN Y, LEFT EDGE FIXED IN X, RIGHT DISPLACES IN X
+    for (unsigned int i = 0; i < number_dofs; i++)
+    {
+        if (fabs(support_points[i](0)) < 1.0e-6) //on left boundary
+        {
+            if (is_x1_comp[i])
+                homo_dofs[i] = true; //x-displacement DOFs that will be homogeneous in the Newton iteration (fixed in this case)
+
+            if (fabs(support_points[i](1) - domain_dimensions[1] / 2.0) < 1.0e-6) //at midpoint in y-direction
+            {
+                if (is_x2_comp[i] || is_w_comp[i]) //in-plane and out-of-plane DOFs that will be homogeneous in the Newton iteration (fixed in this case)
+                    homo_dofs[i] = true;
+            }
+        }
+
+        if (fabs(support_points[i](0) - domain_dimensions[0]) < 1.0e-6) //on right boundary
+        {
+            if (is_x1_comp[i] == true) // Add to list of DOFs where we apply loading
+            {
+                load_dofs[i] = true;
+                homo_dofs[i] = true; // Load DOFs will also be homogeneous in the Newton iteration
+            }
+            if (fabs(support_points[i](1) - domain_dimensions[1] / 2.0) < 1.0e-6) //at midpoint in y-direction
+            {
+                if (is_x2_comp[i] || is_w_comp[i]) //Same as above
+                    homo_dofs[i] = true;
+            }
+
+
+        }
 
 
        // do the extra points we are constraining
@@ -603,8 +603,16 @@ namespace effective_plate
     E0 = system_energy;
     previous_solution = present_solution;
     Vector<double> dpred = present_solution;
+    dpred = 0.0;
 
-    bool updateFlag = true;
+    bool updateFlag = false;
+
+    std::vector<double> load_vect;
+    std::vector<double> displacement_vect;
+    char load_disp_file[MAXLINE];
+    strcpy(load_disp_file, output_directory);
+    strcat(load_disp_file, "/stretch_stress.dat");
+    std::ofstream out(load_disp_file);
 
     for(unsigned int i = 0; i < load_steps; i ++)
     {
@@ -614,7 +622,7 @@ namespace effective_plate
 
       previous_solution = present_solution;
 
-//      present_solution += dpred;
+      present_solution += dpred;
 
       std::cout << "  Iteration : " << i+1 << std::endl;
       newton_iterate();
@@ -636,16 +644,23 @@ namespace effective_plate
         updateFlag = false;
 
       output_results(i);
+
+      load_vect.push_back(get_rhs_loads());
+      displacement_vect.push_back(current_load_value);
 //      output_matrix_csv();
 //      if(num_neg_eigs > 0)
 //        break;
 
+      out << std::setprecision(14) << displacement_vect[i]/domain_dimensions[0] + 1.0 << " " << load_vect[i]/domain_dimensions[1] << std::endl;
 
 //      present_solution *= 2.0;
 //      present_solution -= previous_solution;
 //      exit(-1);
     }
 
+
+
+    out.close();
 //    evaluation_point = present_solution;
 //    assemble_system_energy();
 //    double E1 = system_energy;
@@ -1097,6 +1112,24 @@ namespace effective_plate
 //    }
 
     return num_neg_eigs;
+  }
+
+  double PlateProblem::get_rhs_loads()
+  {
+
+    evaluation_point = present_solution;
+    assemble_system_rhs();
+
+    double total_load = 0.0;
+    for(unsigned int i = 0; i < dof_handler.n_dofs(); i ++)
+    {
+      if(load_dofs[i] == true)
+      {
+        total_load -= system_rhs[i];
+      }
+    }
+
+    return total_load;
   }
 
   void PlateProblem::assemble_system_energy()
