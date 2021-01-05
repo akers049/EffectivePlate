@@ -289,6 +289,8 @@ namespace effective_plate
 
     double system_energy = 0.0;
     unsigned int middle_dof = 0;
+    double eps_w = 1.0e-5;
+    double r_w = 30.0;
 
 
     bool firstFlag = true;

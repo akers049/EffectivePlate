@@ -45,50 +45,54 @@ namespace effective_plate
 
 
   double WX::value (const Point<DIM>  &p,
-                                   const unsigned int  component) const
-  {
-    // this is a scalar function, so make sure component is zero...
-    Assert (component == 0, ExcNotImplemented());
-    Assert (p.dimension == 2, ExcNotImplemented())
+                                    const unsigned int  component) const
+   {
+     // this is a scalar function, so make sure component is zero...
+     Assert (component == 0, ExcNotImplemented());
+     Assert (p.dimension == 2, ExcNotImplemented())
 
-    // Put your function for WX. p(0) is x1 value, p(1) is the x2 value
+     // Put your function for WX. p(0) is x1 value, p(1) is the x2 value
 
-    double wx = (lx - delta)/2.0;
+     double wx = (lx - delta)/2.0; //For dome or "unstretchable" isotropic and anisotropic plate
+     // double wx = 0.0; //For "stretchable" isotropic plate
 
-    return wx;
-  }
+     return wx;
+   }
 
-  void WX::value_list(const std::vector< Point< DIM > > &  points,
-                           std::vector< double > &   values,
-                           const unsigned int  component ) const
-  {
-    for(unsigned int i = 0; i < points.size(); i++)
-      values[i] = WX::value(points[i], component);
+   void WX::value_list(const std::vector< Point< DIM > > &  points,
+                            std::vector< double > &   values,
+                            const unsigned int  component ) const
+   {
+     for(unsigned int i = 0; i < points.size(); i++)
+       values[i] = WX::value(points[i], component);
 
-  }
+   }
 
-  void WX::set_param_values(double lx_, double ly_, double delta_)
-  {
-    lx = lx_;
-    ly = ly_;
-    delta = delta_;
-  }
+   void WX::set_param_values(double lx_, double ly_, double delta_)
+   {
+     lx = lx_;
+     ly = ly_;
+     delta = delta_;
+   }
 
-  double WY::value (const Point<DIM>  &p,
-                    const unsigned int  component) const
-  {
-    // this is a scalar function, so make sure component is zero...
-    Assert (component == 0, ExcNotImplemented());
-    Assert (p.dimension == 2, ExcNotImplemented())
+   double WY::value (const Point<DIM>  &p,
+                     const unsigned int  component) const
+   {
+     // this is a scalar function, so make sure component is zero...
+     Assert (component == 0, ExcNotImplemented());
+     Assert (p.dimension == 2, ExcNotImplemented())
 
-    // Put your function for WY. p(0) is x1 value, p(1) is the x2 value
-    double x1 = p[0];
-    double x2 = p[1];
+     // Put your function for WY. p(0) is x1 value, p(1) is the x2 value
+     double x1 = p[0];
+     double x2 = p[1];
 
-    double wy = ((ly - delta)/2.0)*(1.0 - sin(x2*M_PI));
+     double wy = ((ly - delta)/2.0)*(1.0 - sin(x2*M_PI)); //For dome
+     // double wy = 0.0; //For "stretchable" isotropic and anisotropic plate
+//     double wy = (ly - delta) / 2.0; //For "unstretchable isotropic plate
 
-    return wy;
-  }
+     return wy;
+   }
+
 
   void WY::value_list(const std::vector< Point< DIM > > &  points,
                            std::vector< double > &   values,
@@ -259,26 +263,59 @@ namespace effective_plate
         boundary_dof);
 
 
-     for(unsigned int  i = 0; i < number_dofs; i ++)
-     {
-       if(fabs( support_points[i](1) - domain_dimensions[1]/2.0) < 1.0e-6)
-       {
-         if(fabs(support_points[i](0)) < 1.0e-6)
-         {
-           if(is_x1_comp[i] || is_x2_comp[i] || is_w_comp[i])
-             homo_dofs[i] = true;
-         }
+//    POINT LOADING
+    for(unsigned int  i = 0; i < number_dofs; i ++)
+    {
+      if(fabs( support_points[i](1) - domain_dimensions[1]/2.0) < 1.0e-6) //at midpoint in y-direction
+      {
+        if(fabs(support_points[i](0)) < 1.0e-6) //on left boundary
+        {
+          if(is_x1_comp[i] || is_x2_comp[i] || is_w_comp[i]) //in-plane and out-of-plane DOFs that will be homogeneous in the Newton iteration (fixed in this case)
+            homo_dofs[i] = true;
+        }
 
-         if(fabs(support_points[i](0) - domain_dimensions[0]) < 1.0e-6)
-         {
-           if(is_x1_comp[i] == true)
-             load_dofs[i] = true;
+        if(fabs(support_points[i](0) - domain_dimensions[0]) < 1.0e-6) //on right boundary
+        {
+          if(is_x1_comp[i] == true) //add to list of DOFs where we apply loading
+            load_dofs[i] = true;
 
-           if(is_x1_comp[i] || is_x2_comp[i] || is_w_comp[i])
-             homo_dofs[i] = true;
-         }
+          if(is_x1_comp[i] || is_x2_comp[i] || is_w_comp[i]) //Same as above (load DOFs will also be homogeneous in the Newton iteration)
+            homo_dofs[i] = true;
+        }
 
-       }
+      }
+
+//    // EDGES FREE TO SLIDE IN Y, LEFT EDGE FIXED IN X, RIGHT DISPLACES IN X
+//    for (unsigned int i = 0; i < number_dofs; i++)
+//    {
+//        if (fabs(support_points[i](0)) < 1.0e-6) //on left boundary
+//        {
+//            if (is_x1_comp[i])
+//                homo_dofs[i] = true; //x-displacement DOFs that will be homogeneous in the Newton iteration (fixed in this case)
+//
+//            if (fabs(support_points[i](1) - domain_dimensions[1] / 2.0) < 1.0e-6) //at midpoint in y-direction
+//            {
+//                if (is_x2_comp[i] || is_w_comp[i]) //in-plane and out-of-plane DOFs that will be homogeneous in the Newton iteration (fixed in this case)
+//                    homo_dofs[i] = true;
+//            }
+//        }
+//
+//        if (fabs(support_points[i](0) - domain_dimensions[0]) < 1.0e-6) //on right boundary
+//        {
+//            if (is_x1_comp[i] == true) // Add to list of DOFs where we apply loading
+//            {
+//                load_dofs[i] = true;
+//                homo_dofs[i] = true; // Load DOFs will also be homogeneous in the Newton iteration
+//            }
+//            if (fabs(support_points[i](1) - domain_dimensions[1] / 2.0) < 1.0e-6) //at midpoint in y-direction
+//            {
+//                if (is_x2_comp[i] || is_w_comp[i]) //Same as above
+//                    homo_dofs[i] = true;
+//            }
+//
+//
+//        }
+
 
        // do the extra points we are constraining
        if(fabs( support_points[i](0) - domain_dimensions[0]/2.0) < 1.0e-6 &&
@@ -592,7 +629,7 @@ namespace effective_plate
 //      if(i == 0)
       if(updateFlag)
       {
-        num_neg_eigs = get_system_eigenvalues(-1);
+        num_neg_eigs = get_system_eigenvalues(i);
         std::cout << "      Number of negative eigenvalues is : " << num_neg_eigs << std::endl;
       }
       if(num_neg_eigs > 0)
@@ -822,7 +859,7 @@ namespace effective_plate
           smallest_eig_indx = i;
         else if(eigenvalues[i] < eigenvalues[smallest_eig_indx])
           smallest_eig_indx = i;
-        smallest_eig_indx = i;
+//        smallest_eig_indx = i;
         num_neg_eigs ++;
 
       }
@@ -861,7 +898,7 @@ namespace effective_plate
         unstable_eig[5*k+4] = 0.0;
       }
 
-      unstable_eig *= 0.1;
+      unstable_eig *= 0.01;
       present_solution += unstable_eig;
 
 
@@ -1080,6 +1117,8 @@ namespace effective_plate
     std::vector<Tensor<1, DIM>> lam_gradients(n_q_points);
     std::vector<double> v_values(n_q_points);
     std::vector<double> lam_values(n_q_points);
+    std::vector<double> w_values(n_q_points);
+
 
 //    std::vector<Tensor<2, DIM>> w_hessians(n_q_points);
 
@@ -1104,6 +1143,8 @@ namespace effective_plate
 
       fe_values[displacements].get_function_gradients(evaluation_point, displacement_gradients);
       fe_values[w].get_function_gradients(evaluation_point, w_gradients);
+      fe_values[w].get_function_values(evaluation_point, w_values);
+
       fe_values[lam].get_function_gradients(evaluation_point, lam_gradients);
       fe_values[v].get_function_values(evaluation_point, v_values);
       fe_values[lam].get_function_values(evaluation_point, lam_values);
@@ -1122,7 +1163,13 @@ namespace effective_plate
         get_F(displacement_gradients[q_point], F);
         double lap_w = v_values[q_point]; //trace(w_hessians[q_point]);
         system_energy += PE.get_E(F, w_gradients[q_point], lap_w)*fe_values.JxW(q_point);
+
+        // lagrange multiplier
         system_energy += (lam_gradients[q_point]*w_gradients[q_point] + lam_values[q_point]*v_values[q_point])*fe_values.JxW(q_point);
+
+        // penalty for positive w
+        double dw = -std::max(0.0, -(eps_w + w_values[q_point]));
+        system_energy += 0.5*r_w*dw*dw*fe_values.JxW(q_point);
 
       }
     }
@@ -1147,6 +1194,7 @@ namespace effective_plate
 
     std::vector<Tensor<2,DIM>> displacement_gradients(n_q_points);
     std::vector<Tensor<1, DIM>> w_gradients(n_q_points);
+    std::vector<double> w_values(n_q_points);
     std::vector<Tensor<1, DIM>> lam_gradients(n_q_points);
     std::vector<double> v_values(n_q_points);
     std::vector<double> lam_values(n_q_points);
@@ -1180,6 +1228,8 @@ namespace effective_plate
 
       fe_values[displacements].get_function_gradients(evaluation_point, displacement_gradients);
       fe_values[w].get_function_gradients(evaluation_point, w_gradients);
+      fe_values[w].get_function_values(evaluation_point, w_values);
+
       fe_values[lam].get_function_gradients(evaluation_point, lam_gradients);
       fe_values[v].get_function_values(evaluation_point, v_values);
       fe_values[lam].get_function_values(evaluation_point, lam_values);
@@ -1215,6 +1265,9 @@ namespace effective_plate
           cell_rhs(n) -= w_gradients[q_point]*fe_values[lam].gradient(n, q_point)*JxW;
           cell_rhs(n) -= v_values[q_point]*fe_values[lam].value(n, q_point)*JxW;
 
+          // penalty for positive w
+          double dw = -std::max(0.0, -(eps_w + w_values[q_point]));
+          cell_rhs(n) -= 0.5*r_w*dw*fe_values[w].value(n, q_point)*fe_values.JxW(q_point);
 //          cell_rhs(n) -= de_dat.dW_dlap_w*trace(fe_values[w].hessian(n, q_point))*JxW;
 
           for(unsigned int i = 0; i<DIM; ++i)
@@ -1262,6 +1315,7 @@ namespace effective_plate
 
     std::vector<Tensor<2,DIM>> displacement_gradients(n_q_points);
     std::vector<Tensor<1, DIM>> w_gradients(n_q_points);
+    std::vector<double> w_values(n_q_points);
 //    std::vector<Tensor<2, DIM>> w_hessians(n_q_points);
 
 
@@ -1294,6 +1348,8 @@ namespace effective_plate
 
       fe_values[displacements].get_function_gradients(evaluation_point, displacement_gradients);
       fe_values[w].get_function_gradients(evaluation_point, w_gradients);
+      fe_values[w].get_function_values(evaluation_point, w_values);
+
 //      fe_values[w].get_function_hessians(evaluation_point, w_hessians);
 
       eval_wx.value_list (fe_values.get_quadrature_points(), wx);
@@ -1325,6 +1381,12 @@ namespace effective_plate
             cell_matrix(n,m) += fe_values[lam].gradient(n, q_point)*fe_values[w].gradient(m, q_point)*JxW;
             cell_matrix(n,m) += fe_values[lam].gradient(m, q_point)*fe_values[w].gradient(n, q_point)*JxW;
 
+            // penalty for positive w
+            double dw = -std::max(0.0, -(eps_w + w_values[q_point]));
+            if(dw < -1.0e-12)
+            {
+              cell_matrix(n,m) += r_w*fe_values[w].value(m, q_point)*fe_values[w].value(n, q_point)*JxW;
+            }
 
             for(unsigned int i = 0; i < DIM; i ++)
               for(unsigned int j = 0; j < DIM; j ++)
