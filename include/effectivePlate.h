@@ -207,7 +207,7 @@ namespace effective_plate
     {
       for(unsigned int i = 0; i < dof_handler.n_dofs(); i++)
         if(load_dofs[i] == true)
-          present_solution[i] = value;
+          present_solution[i] = value * load_factors[i];
     }
 
 
@@ -259,6 +259,8 @@ namespace effective_plate
 
     std::vector<bool> load_dofs;
 
+    std::vector<double> load_factors;
+
     std::vector<unsigned int>  grid_dimensions;
     std::vector<double> domain_dimensions;
 
@@ -290,7 +292,7 @@ namespace effective_plate
     double system_energy = 0.0;
     unsigned int middle_dof = 0;
     double eps_w = 1.0e-5;
-    double r_w = 30.0;
+    double r_w = 300.0;
 
 
     bool firstFlag = true;

@@ -1,0 +1,23 @@
+# output name
+preliminary_results_stretch_stress_00
+
+# grid dimensions
+18 18
+
+# domain dimensions
+0.108 0.108
+
+# material parameters: lx, ly, delta
+0.006 0.006 0.00075
+
+# mu lambda B eta
+16. 16. 0.1 0.0024
+
+# ds num steps
+0.054 20
+
+# quadrature pts in each dir
+4 4
+
+# newton raphson tolerance and  max steps
+1e-4 100
