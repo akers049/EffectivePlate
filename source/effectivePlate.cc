@@ -52,9 +52,24 @@ namespace effective_plate
      Assert (p.dimension == 2, ExcNotImplemented())
 
      // Put your function for WX. p(0) is x1 value, p(1) is the x2 value
+     double x1 = p[0];
+     double x2 = p[1];
 
-     double wx = (lx - delta)/2.0; //For dome or "unstretchable" isotropic and anisotropic plate
-     // double wx = 0.0; //For "stretchable" isotropic plate
+     double wx = (lx - delta)/2.0; //For dome or "unstretchable" isotropic and anisotropic plate in SOFT direction
+//     double wx = 0.0; //For "stretchable" isotropic plate and anisotropic plate in STIFF direction
+
+     //// "C WRINKLES" SHAPE:
+     //double spacing = 0.108 / 30.0; //0.108 = plate length, modify if needed. MAY NEED TO ADJUST MESH SIZE
+     //double wx = (lx - delta) / 2.0;
+     //if (((x1 >= 5 * spacing) && (x1 <= 10 * spacing) && (x2 >= 4 * spacing) && (x2 <= 25 * spacing)) || ((x1 > 10 * spacing) && (x1 <= 25 * spacing) && (x2 >= 4 * spacing) && (x2 <= 9 * spacing)) || ((x1 > 10 * spacing) && (x1 <= 25 * spacing) && (x2 >= 20 * spacing) && (x2 <= 25 * spacing))) {
+     //    double wx = 0.0;
+     //}
+
+     //// "DOUBLE BUMP" SHAPE:
+     //double plateXdim = 0.216; //plate length, modify if needed.
+     //double wx = ((lx - delta) / 2.0) * (1.0 - sin(2.0 * x1 * M_PI / plateXdim));
+     //if(x1 > plateXdim / 2.0)
+     //    double wx = ((lx - delta) / 2.0) * (1.0 - sin(2.0 * x1 * M_PI / plateXdim + M_PI));
 
      return wx;
    }
@@ -86,9 +101,24 @@ namespace effective_plate
      double x1 = p[0];
      double x2 = p[1];
 
-//     double wy = ((ly - delta)/2.0)*(1.0 - sin(x2*M_PI)); //For dome
-     double wy = 0.0; //For "stretchable" isotropic and anisotropic plate
-//     double wy = (ly - delta) / 2.0; //For "unstretchable isotropic plate
+//     double plateXdim = 1.0; //plate length, modify if needed.
+//     double wy = ((ly - delta)/2.0)*(1.0 - sin(x2*M_PI / plateXdim)); //For dome
+     double wy = 0.0; //For "stretchable" isotropic and anisotropic plate in SOFT direction
+//     double wy = (ly - delta) / 2.0; //For "unstretchable" isotropic plate or anisotropic plate in STIFF direction
+     
+    //// "C WRINKLES" SHAPE:
+    // double plateXdim = 0.108; //plate length, modify if needed.
+    // double spacing = plateXdim /30.0;  // MAY NEED TO ADJUST MESH SIZE
+    // double wy = (ly - delta) / 2.0;
+    // if (((x1 >= 5 * spacing) && (x1 <= 10 * spacing) && (x2 >= 4 * spacing) && (x2 <= 25 * spacing)) || ((x1 > 10 * spacing) && (x1 <= 25 * spacing) && (x2 >= 4 * spacing) && (x2 <= 9 * spacing)) || ((x1 > 10 * spacing) && (x1 <= 25 * spacing) && (x2 >= 20 * spacing) && (x2 <= 25 * spacing))) 
+    // {
+    //     double wy = 0.0;
+    // }
+
+    //// "DOUBLE BUMP" SHAPE:
+    // double plateYdim = 0.108; //plate length, modify if needed.
+    // double wy = ((ly - delta) / 2.0) * (1.0 - sin(x2 * M_PI / plateYdim));
+
 
      return wy;
    }
@@ -222,6 +252,7 @@ namespace effective_plate
 
     homo_dofs.resize(dof_handler.n_dofs(), false);
     load_dofs.resize(dof_handler.n_dofs(), false);
+    load_factors.resize(dof_handler.n_dofs(), 0.0);
 
 
     std::vector<Point<DIM>> support_points(dof_handler.n_dofs());
@@ -263,7 +294,7 @@ namespace effective_plate
         boundary_dof);
 
 
-//    POINT LOADING
+//    POINT LOADING AT CENTER (DOME)
 //    for(unsigned int  i = 0; i < number_dofs; i ++)
 //    {
 //      if(fabs( support_points[i](1) - domain_dimensions[1]/2.0) < 1.0e-6) //at midpoint in y-direction
@@ -277,13 +308,16 @@ namespace effective_plate
 //        if(fabs(support_points[i](0) - domain_dimensions[0]) < 1.0e-6) //on right boundary
 //        {
 //          if(is_x1_comp[i] == true) //add to list of DOFs where we apply loading
+//          {
 //            load_dofs[i] = true;
-//
+//            load_factors[i] = 1.0;
+//          }
 //          if(is_x1_comp[i] || is_x2_comp[i] || is_w_comp[i]) //Same as above (load DOFs will also be homogeneous in the Newton iteration)
 //            homo_dofs[i] = true;
 //        }
 //
 //      }
+
 
     // EDGES FREE TO SLIDE IN Y, LEFT EDGE FIXED IN X, RIGHT DISPLACES IN X
     for (unsigned int i = 0; i < number_dofs; i++)
@@ -305,6 +339,7 @@ namespace effective_plate
             if (is_x1_comp[i] == true) // Add to list of DOFs where we apply loading
             {
                 load_dofs[i] = true;
+                load_factors[i] = 1.0;
                 homo_dofs[i] = true; // Load DOFs will also be homogeneous in the Newton iteration
             }
             if (fabs(support_points[i](1) - domain_dimensions[1] / 2.0) < 1.0e-6) //at midpoint in y-direction
@@ -315,6 +350,108 @@ namespace effective_plate
 
 
         }
+
+
+    //// POINT LOADING FOR "C WRINKLES"
+    //for(unsigned int  i = 0; i < number_dofs; i ++)
+    //{
+    //  if(fabs(support_points[i](0)) < 1.0e-6) //on left boundary
+    //  {
+    //      if ((fabs(support_points[i](1) - domain_dimensions[1] / 3.0) < 1.0e-6) || (fabs(support_points[i](1) - domain_dimensions[1] * 2.0 / 3.0) < 1.0e-6))
+    //      {
+    //          if (is_x2_comp[i] || is_w_comp[i]) //in-plane and out-of-plane DOFs that will be homogeneous in the Newton iteration (fixed in this case)
+    //              homo_dofs[i] = true;
+    //      }
+    //      if ((fabs(support_points[i](1) - domain_dimensions[1] / 2.0) < 1.0e-6)) 
+    //      {
+    //          if (is_x1_comp[i] || is_x2_comp[i] || is_w_comp[i]) //in-plane and out-of-plane DOFs that will be homogeneous in the Newton iteration (fixed in this case)
+    //              homo_dofs[i] = true;
+    //      }
+    //  }
+
+    //  if (fabs(support_points[i](0) - domain_dimensions[0]) < 1.0e-6) //on right boundary
+    //  {
+    //      if (fabs(support_points[i](1) - domain_dimensions[1] / 2.0) < 1.0e-6)
+    //      {
+    //          if (is_x1_comp[i] == true) //add to list of DOFs where we apply loading
+    //          {
+    //              load_dofs[i] = true;
+    //              load_factors[i] = 1.0;
+    //          }
+    //
+    //          if (is_x1_comp[i] || is_x2_comp[i] || is_w_comp[i]) //Same as above (load DOFs will also be homogeneous in the Newton iteration)
+    //              homo_dofs[i] = true;
+    //      }
+    //  }
+    //  
+    //  if (fabs(support_points[i](1)) < 1.0e-6) //on bottom boundary
+    //  {
+    //      if ((fabs(support_points[i](0) - domain_dimensions[0] / 3.0) < 1.0e-6) || (fabs(support_points[i](0) - domain_dimensions[0] / 2.0) < 1.0e-6) || (fabs(support_points[i](0) - domain_dimensions[0] * 2.0 / 3.0) < 1.0e-6))
+    //      {
+    //          if (is_x2_comp[i] == true) //add to list of DOFs where we apply loading (MAKE SURE LOADING IS IN DOWNWARD DIRECTION)
+    //          {
+    //              load_dofs[i] = true;
+    //              load_factors[i] = -1.0;
+    //          }
+
+    //          if (is_x2_comp[i] || is_w_comp[i]) //Same as above (load DOFs will also be homogeneous in the Newton iteration)
+    //              homo_dofs[i] = true;
+    //      }
+    //  }
+    //  
+    //  if (fabs(support_points[i](1) - domain_dimensions[1]) < 1.0e-6) //on top boundary
+    //  {
+    //      if ((fabs(support_points[i](0) - domain_dimensions[0] / 3.0) < 1.0e-6) || (fabs(support_points[i](0) - domain_dimensions[0] / 2.0) < 1.0e-6) || (fabs(support_points[i](0) - domain_dimensions[0] * 2.0 / 3.0) < 1.0e-6))
+    //      {
+    //          if (is_x2_comp[i] == true) //add to list of DOFs where we apply loading (MAKE SURE LOADING IS IN UPWARD DIRECTION)
+    //          {
+    //              load_dofs[i] = true;
+    //              load_factors[i] = 1.0;
+    //          }
+
+    //          if (is_x2_comp[i] || is_w_comp[i]) //Same as above (load DOFs will also be homogeneous in the Newton iteration)
+    //              homo_dofs[i] = true;
+    //      }
+    //  }//END OF "C WRINKLES"
+
+////    POINT LOADING FOR "DOUBLE BUMP"
+//    for (unsigned int i = 0; i < number_dofs; i++)
+//    {
+//    if ((fabs(support_points[i](0)) < 1.0e-6) && (fabs(support_points[i](1)) < 1.0e-6)) //on bottom left corner
+//    {
+//        if (is_x1_comp[i] || is_x2_comp[i] || is_w_comp[i]) //in-plane and out-of-plane DOFs that will be homogeneous in the Newton iteration (fixed in this case)
+//            homo_dofs[i] = true;
+//    }
+//
+//    if ((fabs(support_points[i](0)) < 1.0e-6) && (fabs(support_points[i](1) - domain_dimensions[1]) < 1.0e-6)) //on top left corner
+//    {
+//        if (is_x1_comp[i] || is_w_comp[i]) //in-plane and out-of-plane DOFs that will be homogeneous in the Newton iteration (fixed in this case)
+//            homo_dofs[i] = true;
+//    }
+//
+//    if ((fabs(support_points[i](0) - domain_dimensions[0]) < 1.0e-6) && (fabs(support_points[i](1)) < 1.0e-6)) //on bottom right corner
+//    {
+//        if (is_x1_comp[i]) //add to list of DOFs where we apply loading
+//        {
+//            load_dofs[i] = true;
+//            load_factors[i] = 1.0;
+//        }
+//
+//        if (is_x1_comp[i] || is_x2_comp[i] || is_w_comp[i]) //in-plane and out-of-plane DOFs that will be homogeneous in the Newton iteration (fixed in this case)
+//            homo_dofs[i] = true;
+//    }
+//
+//    if ((fabs(support_points[i](0) - domain_dimensions[0]) < 1.0e-6) && (fabs(support_points[i](1) - domain_dimensions[1]) < 1.0e-6)) //on top right corner
+//    {
+//        if (is_x1_comp[i]) //add to list of DOFs where we apply loading
+//        {
+//            load_dofs[i] = true;
+//            load_factors[i] = 1.0;
+//        }
+//
+//        if (is_x1_comp[i] || is_w_comp[i]) //in-plane and out-of-plane DOFs that will be homogeneous in the Newton iteration (fixed in this case)
+//            homo_dofs[i] = true;
+//    }
 
 
        // do the extra points we are constraining
@@ -611,7 +748,7 @@ namespace effective_plate
     std::vector<double> displacement_vect;
     char load_disp_file[MAXLINE];
     strcpy(load_disp_file, output_directory);
-    strcat(load_disp_file, "/stretch_stress.dat");
+    strcat(load_disp_file, "/stretch_stress_Test.dat");
     std::ofstream out(load_disp_file);
 
     for(unsigned int i = 0; i < load_steps; i ++)

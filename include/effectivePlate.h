@@ -212,7 +212,7 @@ namespace effective_plate
     {
       for(unsigned int i = 0; i < dof_handler.n_dofs(); i++)
         if(load_dofs[i] == true)
-          present_solution[i] = value;
+          present_solution[i] = value*load_factors[i];
     }
 
 
@@ -263,6 +263,8 @@ namespace effective_plate
     std::vector<bool> homo_dofs_w;
 
     std::vector<bool> load_dofs;
+
+    std::vector<double> load_factors;
 
     std::vector<unsigned int>  grid_dimensions;
     std::vector<double> domain_dimensions;
