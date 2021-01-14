@@ -1,8 +1,8 @@
 # output name
-preliminary_dome_03
+preliminary_dome_newnew_13_00
 
 # grid dimensions
-18 18
+36 36
 
 # domain dimensions
 0.216 0.216
@@ -11,10 +11,13 @@ preliminary_dome_03
 0.006 0.012 0.00075
 
 # mu lambda B eta
-16. 16. 0.0001 0.0024
+16. 16. 0.0001 0.002
+
+# Material Youngs Modulus, Volume fraction, poisson ratio, thickness ratio
+980 0.52 0.5 0.13
 
 # ds num steps
-0.054 20
+0.04986 40
 
 # quadrature pts in each dir
 4 4

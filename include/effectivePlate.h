@@ -235,13 +235,8 @@ namespace effective_plate
     SparseMatrix<double> system_matrix;
 
     SparsityPattern      sparsity_pattern_wv;
-    SparseMatrix<double> K_wlam;
-    SparseMatrix<double> K_vlam;
+    SparseMatrix<double> K_vw;
     SparseMatrix<double> K_vv;
-
-
-    PETScWrappers::SparseMatrix    system_matrix_petsc;
-
 
     plate_energy PE;
 
@@ -283,6 +278,11 @@ namespace effective_plate
     double B = 1.0;
     double eta = 1.0;
 
+    double material_E = 1.0;
+    double t_ratio= 1.0;
+    double nu = 1.0;
+    double v_ratio = 1.0;
+
     double load_val = 0.01;
     unsigned int load_steps = 10;
 
@@ -292,7 +292,7 @@ namespace effective_plate
     double system_energy = 0.0;
     unsigned int middle_dof = 0;
     double eps_w = 1.0e-5;
-    double r_w = 300.0;
+    double r_w = 100000.0;
 
 
     bool firstFlag = true;
