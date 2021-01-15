@@ -119,11 +119,12 @@ namespace effective_plate
                              std::vector< double > &   values,
                              const unsigned int  component = 0 )   const;
 
-    void set_param_values(double lx_, double ly_, double delta_);
+    void set_param_values(double lx_, double ly_, double delta_, double L);
 
     double lx = 1.0;
     double ly = 1.0;
     double delta = 1.0;
+    double L = 1.0;
 
   };
 
@@ -243,6 +244,7 @@ namespace effective_plate
 
     Vector<double>       newton_update;
     Vector<double>       system_rhs;
+    Vector<double>       unstable_eig;
 
     char output_directory[MAXLINE];
 

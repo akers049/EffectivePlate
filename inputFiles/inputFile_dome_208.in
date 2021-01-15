@@ -1,0 +1,26 @@
+# output name
+preliminary_dome_208_00
+
+# grid dimensions
+36 36
+
+# domain dimensions
+0.27 0.27 
+
+# material parameters: lx, ly, delta
+0.0075 0.015 0.0009375
+
+# mu lambda B eta
+9 9 0.0001 0.0018
+
+# Material Youngs Modulus, poisson ratio, Volume fraction,  thickness ratio
+980 0.5 0.52 0.208
+
+# ds num steps
+0.0459 40
+
+# quadrature pts in each dir
+4 4
+
+# newton raphson tolerance and  max steps
+1e-5 100

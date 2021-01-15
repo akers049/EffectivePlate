@@ -102,7 +102,7 @@ namespace effective_plate
       double x2 = p[1];
 
  //     double plateXdim = 0.216; //plate length, modify if needed.
-      double wy = ((ly - delta)/2.0)*(1.0 - sin(x2*M_PI / 0.216)); //For dome
+      double wy = ((ly - delta)/2.0)*(1.0 - sin(x2*M_PI / L)); //For dome
  //     double wy = 0.0; //For "stretchable" isotropic and anisotropic plate in SOFT direction
  //     double wy = (ly - delta) / 2.0; //For "unstretchable" isotropic plate or anisotropic plate in STIFF direction
 
@@ -133,11 +133,12 @@ namespace effective_plate
 
   }
 
-  void WY::set_param_values(double lx_, double ly_, double delta_)
+  void WY::set_param_values(double lx_, double ly_, double delta_, double L_)
   {
       lx = lx_;
       ly = ly_;
       delta = delta_;
+      L = L_;
   }
 
 
@@ -203,7 +204,7 @@ namespace effective_plate
     PE.set_moduli(mu, lambda, B, eta);
 
     eval_wx.set_param_values(lx, ly, delta);
-    eval_wy.set_param_values(lx, ly, delta);
+    eval_wy.set_param_values(lx, ly, delta, domain_dimensions[1]);
 
     present_solution.reinit (dof_handler.n_dofs());
 
@@ -731,7 +732,7 @@ namespace effective_plate
 
     bool updateFlag = true;
 
-    for(unsigned int i = 0; i < load_steps; i ++)
+    for(unsigned int i = 0; i <= load_steps; i ++)
     {
 
       current_load_value = du*i;
@@ -741,7 +742,7 @@ namespace effective_plate
 
       present_solution += dpred;
 
-      std::cout << "  Iteration : " << i+1 << std::endl;
+      std::cout << "  Iteration : " << i << std::endl;
       newton_iterate();
 
       dpred = present_solution;
@@ -749,12 +750,13 @@ namespace effective_plate
 
       unsigned int num_neg_eigs = 0;
 
+      output_results(i);
+
 //      output_matrix_csv();
 //      exit(-1);
 //      if(i == 0)
       if(updateFlag)
       {
-        previous_solution = present_solution;
         num_neg_eigs = get_system_eigenvalues(i);
         std::cout << "      Number of negative eigenvalues is : " << num_neg_eigs << std::endl;
 
@@ -762,21 +764,25 @@ namespace effective_plate
       if(num_neg_eigs > 0)
       {
         updateFlag = false;
-
-        present_solution += dpred;
         i++;
         current_load_value = du*i;
         set_displacement(current_load_value);
-        std::cout << "  Iteration : " << i+1 << std::endl;
+
+        previous_solution = present_solution;
+
+        present_solution += dpred;
+        present_solution += unstable_eig;
+        std::cout << "  Iteration : " << i << std::endl;
         newton_iterate();
+        output_results(i);
 
         dpred = present_solution;
         dpred -= previous_solution;
-        dpred *= 2.0;
+//        dpred *= 2.0;
 
 
       }
-      output_results(i);
+
 
 //      output_matrix_csv();
 //      if(num_neg_eigs > 0)
@@ -1027,7 +1033,7 @@ namespace effective_plate
       apply_boundaries_to_rhs(&v_values, &homo_dofs_v);
       apply_boundaries_to_rhs(&w_values, &homo_dofs_w);
 
-      Vector<double> unstable_eig(dof_handler.n_dofs());
+      unstable_eig.reinit(dof_handler.n_dofs(), 0.0);
       for(unsigned int k = 0; k < dof_handler_wv.n_dofs(); k++)
       {
         unstable_eig[4*k] = eigenvectors[3*k][smallest_eig_indx];
@@ -1036,8 +1042,7 @@ namespace effective_plate
         unstable_eig[4*k+3] = v_values[k];
       }
 
-      unstable_eig *= 0.1;
-      present_solution += unstable_eig;
+//      present_solution += unstable_eig;
 
 
       // check
@@ -1048,7 +1053,7 @@ namespace effective_plate
 //      DoFTools::extract_dofs(dof_handler, lam_mask, is_lam_comp);
       Vector<double> dest(dof_handler.n_dofs());
 
-      unstable_eig *= 10.0;
+//      unstable_eig *= 10.0;
 
       system_matrix.vmult(dest, unstable_eig);
 //      double next_tot = 0.0;
@@ -1064,6 +1069,9 @@ namespace effective_plate
       // another test
       double quad_form = dest*unstable_eig;
       std::cout << "      Quad Form : " << quad_form << std::endl;
+
+      unstable_eig *= 0.03;
+
 
     }
 //
@@ -2050,8 +2058,10 @@ namespace effective_plate
     dest << src.rdbuf();
 
 
-    double t = domain_dimensions[0]*t_ratio;
-    B = 0.08*v_ratio*material_E*(t*t*t)*(1.0/12.0)*(1.0/(1.0 - nu*nu));
+    double t = lx*t_ratio;
+//    B = 0.03*v_ratio*material_E*(t*t*t)*(1.0/12.0)*(1.0/(1.0 - nu*nu));
+//    double mat_E = mu*(3.0*lambda + 2.0*mu)/(lambda + mu);
+    B = v_ratio*material_E*(t*t)*(1.0/12.0)*(1.0/(1.0 - nu*nu));
 
   }
 
