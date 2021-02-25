@@ -148,7 +148,8 @@ namespace effective_plate
     dof_handler (triangulation),
     dof_handler_wv (triangulation),
     fe (FESystem<DIM>(FE_Q<DIM>(1), DIM), 1,
-         FE_Q<DIM>(1), 1, FE_Q<DIM>(1), 1),
+         FE_Q<DIM>(1), 1,
+         FE_Q<DIM>(1), 1),
     fe_wv (FE_Q<DIM>(1), 1)
   {}
 
